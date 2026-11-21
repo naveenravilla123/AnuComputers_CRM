@@ -1,0 +1,4 @@
+import {randomBytes,scrypt,timingSafeEqual} from "node:crypto";
+function derive(password:string,salt:string):Promise<Buffer>{return new Promise((resolve,reject)=>scrypt(password,salt,64,{N:32768,r:8,p:3,maxmem:64*1024*1024},(e,key)=>e?reject(e):resolve(key)))}
+export async function hashStaffPassword(password:string){if(password.length<12||Buffer.byteLength(password)>256)throw new Error("Password must be at least 12 characters and at most 256 bytes");const salt=randomBytes(32).toString("hex");return {salt,hash:(await derive(password,salt)).toString("hex")}}
+export async function verifyStaffPassword(password:string,value:unknown){if(Buffer.byteLength(password)>256||!value||typeof value!=="object")return false;const v=value as {salt?:string;hash?:string};if(!v.salt||!v.hash||!/^[a-f0-9]{64}$/.test(v.salt)||!/^[a-f0-9]{128}$/.test(v.hash))return false;return timingSafeEqual(await derive(password,v.salt),Buffer.from(v.hash,"hex"))}
