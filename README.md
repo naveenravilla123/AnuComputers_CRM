@@ -19,7 +19,7 @@ Dashboard; leads; customers; products; inventory; suppliers; purchases; opportun
 
 ## Current scope
 
-This is an initial implementation, not a production-ready deployment. UI demo data is local in browser state; API endpoints for customers, products and service cases use Prisma. Add authentication, authorization, transactions, stock reservation, GST configuration and official WhatsApp/Meta integrations before handling real customer data. Do not store device passwords in plain text.
+This is an initial implementation, not a production-ready deployment. UI demo data is local in browser state; API endpoints for customers, products and service cases use Prisma and require a bearer token matching CRM_API_KEY. For example, send Authorization: Bearer <CRM_API_KEY>. Never expose this key in browser code. Add authentication, authorization, transactions, stock reservation, GST configuration and official WhatsApp/Meta integrations before handling real customer data. Do not store device passwords in plain text.
 
 ## Technology
 
