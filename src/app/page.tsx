@@ -1,10 +1,9 @@
 import Workspace from "@/components/workspace";
 import {prisma} from "@/lib/prisma";
-import {headers} from "next/headers";
-import {authorized} from "@/lib/api-auth";
+
 export const dynamic="force-dynamic";
 export default async function Home(){
- if(!authorized(new Request("http://localhost",{headers:headers()})))return <Workspace metrics={null}/>;
+
  try{const [sales,service,activeRepairs,unpaid]=await Promise.all([
  prisma.invoice.aggregate({where:{orderId:{not:null},status:"PAID"},_sum:{total:true}}),
  prisma.invoice.aggregate({where:{caseId:{not:null},orderId:null,status:"PAID"},_sum:{total:true}}),
