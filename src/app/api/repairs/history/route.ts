@@ -1,0 +1,5 @@
+import {NextRequest,NextResponse} from "next/server";
+import {prisma} from "@/lib/prisma";
+import {validSession} from "@/lib/session";
+export const dynamic="force-dynamic";
+export async function GET(r:NextRequest){if(!await validSession(r.cookies.get("anu_session")?.value))return NextResponse.json({error:"Unauthorized"},{status:401});const id=r.nextUrl.searchParams.get("id");if(!id||id.length>100)return NextResponse.json({error:"Invalid case ID"},{status:400});try{const c=await prisma.serviceCase.findUnique({where:{id},select:{createdAt:true}});if(!c)return NextResponse.json({error:"Case not found"},{status:404});const history=await prisma.auditLog.findMany({where:{entity:"ServiceCase",entityId:id,action:{startsWith:"REPAIR_"}},select:{id:true,action:true,at:true,before:true,after:true},orderBy:{at:"asc"},take:200});return NextResponse.json({createdAt:c.createdAt,history},{headers:{"Cache-Control":"no-store"}})}catch{return NextResponse.json({error:"History unavailable"},{status:503})}}
