@@ -2,25 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validSession } from "@/lib/session";
 
+import { customObjectStandardFields, customRecordAudit, parseObjectFields, validateObjectValues,
+  validObjectKey as validKey, type ObjectField as Field } from "@/lib/custom-object-fields";
+
 export const dynamic = "force-dynamic";
 
 const definitionPrefix = "setup.customObject.";
 const recordPrefix = "custom.record.";
-const validKey = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-z][a-z0-9_]{0,39}$/.test(value);
-type Field = { key: string; label: string; type: "text" | "number" | "checkbox" };
-function parseFields(input: unknown): Field[] {
-  if (!Array.isArray(input) || input.length > 30) throw Error("Invalid fields");
-  const keys = new Set<string>();
-  return input.map(field => {
-    if (!field || !validKey(field.key) || keys.has(field.key) ||
-        typeof field.label !== "string" || !field.label.trim() || field.label.length > 100 ||
-        !["text", "number", "checkbox"].includes(field.type)) throw Error("Invalid fields");
-    keys.add(field.key);
-    return { key: field.key, label: field.label.trim(), type: field.type };
-  });
-}
-
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 const signedIn = (request: NextRequest) => validSession(request.cookies.get("anu_session")?.value);
 
@@ -37,7 +25,7 @@ export async function GET(request: NextRequest) {
       }) : [],
     ]);
     return NextResponse.json({
-      objects: definitions.map(row => ({ key: row.key.slice(definitionPrefix.length), definition: row.value })),
+      objects: definitions.map(row => ({ key: row.key.slice(definitionPrefix.length), definition: { ...(row.value as object), standardFields: customObjectStandardFields } })),
       records: records.map(row => ({ id: row.key.slice(recordPrefix.length + (object?.length ?? 0) + 1), record: row.value })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
@@ -66,19 +54,20 @@ export async function POST(request: NextRequest) {
         if (lookup !== null && (!validKey(lookup) || !await tx.businessSetting.findUnique({
           where: { key: definitionPrefix + lookup },
         }))) throw Error("Unknown lookup object");
-        const fields = parseFields(input.fields ?? []);
-        await tx.businessSetting.create({ data: { key: definitionKey, value: { name, lookup, fields } } });
+        const fields = parseObjectFields(input.fields ?? []);
+        await tx.businessSetting.create({ data: { key: definitionKey, value: { name, lookup, fields, standardFields: [...customObjectStandardFields] } } });
         await tx.auditLog.create({ data: { action: "CUSTOM_OBJECT_CREATED", entity: object, entityId: object, actorId } });
         return { object };
       }
 
       if (input.action === "addField" && definition) {
         const config = definition.value as { name: string; lookup?: string | null; fields?: Field[] };
-        const fields = parseFields([...(config.fields ?? []), input.field]);
+        const existing = config.fields ?? [];
+        const fields = parseObjectFields([...existing, input.field], existing.length);
         const field = fields[fields.length - 1];
-        if (["name", "owner", "created_by", "last_modified_by", "created_at", "updated_at", "lookup_id"].includes(field.key)) {
-          throw Error("Invalid fields");
-        }
+        if (field.required && await tx.businessSetting.count({
+          where: { key: { startsWith: recordPrefix + object + "." } },
+        })) throw Error("Add the field as optional because this object already has records");
         await tx.businessSetting.update({
           where: { key: definitionKey },
           data: { value: { ...config, fields } },
@@ -98,17 +87,7 @@ export async function POST(request: NextRequest) {
       if (input.id && !previous) throw Error("Record not found");
       const config = definition.value as { lookup?: string; fields?: Field[] };
       const target = config.lookup;
-      const values: Record<string, string | number | boolean> = Object.create(null);
-      const submitted = input.values ?? {};
-      if (!submitted || typeof submitted !== "object" || Array.isArray(submitted)) throw Error("Invalid field values");
-      for (const field of config.fields ?? []) {
-        const value = Object.prototype.hasOwnProperty.call(submitted, field.key) ? submitted[field.key] : undefined;
-        if (value === undefined || value === "") continue;
-        if ((field.type === "text" && (typeof value !== "string" || value.length > 5000)) ||
-            (field.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) ||
-            (field.type === "checkbox" && typeof value !== "boolean")) throw Error("Invalid field values");
-        values[field.key] = value;
-      }
+      const values = validateObjectValues(config.fields ?? [], input.values ?? {});
       const lookupId = input.lookupId || null;
       if (lookupId !== null && (typeof lookupId !== "string" || !target || !await tx.businessSetting.findUnique({
         where: { key: recordPrefix + target + "." + lookupId },
@@ -117,11 +96,7 @@ export async function POST(request: NextRequest) {
       const timestamp = new Date().toISOString();
       const value = {
         name, lookupId, values,
-        createdBy: prior ? prior.createdBy ?? null : actorId,
-        createdAt: prior?.createdAt ?? timestamp,
-        owner: prior ? prior.owner ?? null : actorId,
-        lastModifiedBy: actorId,
-        updatedAt: timestamp,
+        ...customRecordAudit(actorId, timestamp, prior),
       };
       await tx.businessSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
       await tx.auditLog.create({ data: {
@@ -135,7 +110,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const messages = ["Object key already exists", "Unknown lookup object", "Unknown custom object or action",
-      "Invalid record ID", "Record not found", "Lookup record not found", "Invalid fields", "Invalid field values"];
-    return fail(error instanceof Error && messages.includes(error.message) ? error.message : "Unable to save custom object data", 409);
+      "Invalid record ID", "Record not found", "Lookup record not found", "Invalid field definition", "Invalid field values", "Field API name is reserved", "Unsupported field type", "An object can have up to 30 custom fields", "Picklist requires 1–100 options of up to 255 characters", "Add the field as optional because this object already has records"];
+    return fail(error instanceof Error && (messages.includes(error.message) || /^(Invalid value:|Unknown field:)| is required$/.test(error.message)) ? error.message : "Unable to save custom object data", 409);
   }
 }

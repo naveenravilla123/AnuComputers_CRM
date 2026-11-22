@@ -8,6 +8,11 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "address", type: "String", required: false },
     { key: "source", type: "String", required: true },
     { key: "createdAt", type: "DateTime", required: true },
+    { key: "leads", type: "Related list → Lead", required: false },
+    { key: "assets", type: "Related list → Asset", required: false },
+    { key: "cases", type: "Related list → ServiceCase", required: false },
+    { key: "orders", type: "Related list → SalesOrder", required: false },
+    { key: "invoices", type: "Related list → Invoice", required: false },
   ],
   Lead: [
     { key: "id", type: "String", required: true },
@@ -19,6 +24,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "customerId", type: "String", required: false },
     { key: "customer", type: "Lookup → Customer", required: false },
     { key: "createdAt", type: "DateTime", required: true },
+    { key: "quotes", type: "Related list → Quote", required: false },
   ],
   Product: [
     { key: "id", type: "String", required: true },
@@ -31,6 +37,12 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "specifications", type: "Json", required: false },
     { key: "active", type: "Boolean", required: true },
     { key: "createdAt", type: "DateTime", required: true },
+    { key: "stocks", type: "Related list → Stock", required: false },
+    { key: "purchaseItems", type: "Related list → PurchaseItem", required: false },
+    { key: "orderItems", type: "Related list → OrderItem", required: false },
+    { key: "quoteItems", type: "Related list → QuoteItem", required: false },
+    { key: "parts", type: "Related list → PartUsage", required: false },
+    { key: "assets", type: "Related list → Asset", required: false },
   ],
   SalesOrder: [
     { key: "id", type: "String", required: true },
@@ -40,6 +52,8 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "total", type: "Decimal", required: true },
     { key: "createdAt", type: "DateTime", required: true },
     { key: "customer", type: "Lookup → Customer", required: true },
+    { key: "items", type: "Related list → OrderItem", required: false },
+    { key: "invoices", type: "Related list → Invoice", required: false },
   ],
   Quote: [
     { key: "id", type: "String", required: true },
@@ -49,6 +63,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "total", type: "Decimal", required: true },
     { key: "expiresAt", type: "DateTime", required: false },
     { key: "lead", type: "Lookup → Lead", required: false },
+    { key: "items", type: "Related list → QuoteItem", required: false },
   ],
   ServiceCase: [
     { key: "id", type: "String", required: true },
@@ -62,6 +77,8 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "createdAt", type: "DateTime", required: true },
     { key: "customer", type: "Lookup → Customer", required: true },
     { key: "asset", type: "Lookup → Asset", required: false },
+    { key: "jobs", type: "Related list → JobCard", required: false },
+    { key: "invoices", type: "Related list → Invoice", required: false },
   ],
   JobCard: [
     { key: "id", type: "String", required: true },
@@ -74,6 +91,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "deliveredAt", type: "DateTime", required: false },
     { key: "case", type: "Lookup → ServiceCase", required: true },
     { key: "technician", type: "Lookup → Staff", required: false },
+    { key: "parts", type: "Related list → PartUsage", required: false },
   ],
   Asset: [
     { key: "id", type: "String", required: true },
@@ -86,6 +104,8 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "receivedAccessories", type: "String", required: false },
     { key: "customer", type: "Lookup → Customer", required: true },
     { key: "product", type: "Lookup → Product", required: false },
+    { key: "cases", type: "Related list → ServiceCase", required: false },
+    { key: "warranties", type: "Related list → Warranty", required: false },
   ],
   Invoice: [
     { key: "id", type: "String", required: true },
@@ -102,6 +122,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "customer", type: "Lookup → Customer", required: true },
     { key: "order", type: "Lookup → SalesOrder", required: false },
     { key: "case", type: "Lookup → ServiceCase", required: false },
+    { key: "payments", type: "Related list → Payment", required: false },
   ],
   Supplier: [
     { key: "id", type: "String", required: true },
@@ -109,6 +130,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "phone", type: "String", required: false },
     { key: "email", type: "String", required: false },
     { key: "gstin", type: "String", required: false },
+    { key: "purchases", type: "Related list → PurchaseOrder", required: false },
   ],
   Stock: [
     { key: "id", type: "String", required: true },
@@ -128,6 +150,7 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "total", type: "Decimal", required: true },
     { key: "createdAt", type: "DateTime", required: true },
     { key: "supplier", type: "Lookup → Supplier", required: true },
+    { key: "items", type: "Related list → PurchaseItem", required: false },
   ],
   Payment: [
     { key: "id", type: "String", required: true },
@@ -164,5 +187,6 @@ export const objectManagerCatalog: Record<string, {key:string;type:string;requir
     { key: "active", type: "Boolean", required: true },
     { key: "businessId", type: "String", required: true },
     { key: "business", type: "Lookup → Business", required: true },
+    { key: "assignments", type: "Related list → JobCard", required: false },
   ],
 };

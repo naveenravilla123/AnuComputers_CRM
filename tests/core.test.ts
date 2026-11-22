@@ -1,3 +1,4 @@
+import {customRecordAudit, parseObjectFields, validateObjectValues} from "../src/lib/custom-object-fields";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {Prisma} from "@prisma/client";
@@ -52,4 +53,27 @@ test("profile layout takes priority and a stale assignment falls back to the def
   assert.deepEqual(await effectiveLayout(db("tech"),"JobCard",[],"TECHNICIAN"),profileSections);
   assert.deepEqual(await effectiveLayout(db("stale"),"JobCard",[],"TECHNICIAN"),defaultSections);
   assert.deepEqual((await effectiveLayout(db("stale",false),"JobCard",[],"TECHNICIAN")).slice(1),legacySections);
+});
+
+test("custom object field types validate through the shared record validator", () => {
+  const samples = [
+    ["TEXT", "Acme"], ["TEXTAREA", "First line\nSecond line"], ["NUMBER", 0],
+    ["CHECKBOX", false], ["DATE", "2024-02-29"], ["EMAIL", "crm@example.com"],
+    ["PHONE", "+91 9876543210"], ["PICKLIST", "Active"],
+  ] as const;
+  const definitions = parseObjectFields(samples.map(([type]) => ({
+    key: type.toLowerCase(), label: type, type, required: true, options: ["Active"],
+  })));
+  const values = Object.fromEntries(samples.map(([type,value]) => [type.toLowerCase(),value]));
+  assert.deepEqual(validateObjectValues(definitions, values), values);
+  assert.throws(() => validateObjectValues(definitions, { ...values, date: "2025-02-29" }), /Invalid value: DATE/);
+  assert.throws(() => validateObjectValues(definitions, { ...values, picklist: "Unknown" }), /Invalid value: PICKLIST/);
+  assert.throws(() => parseObjectFields([{ key: "created_by_id", label: "Duplicate", type: "TEXT" }]), /reserved/);
+  assert.deepEqual(validateObjectValues([{key:"flag",label:"Flag",type:"checkbox"}],{flag:false}),{flag:false});
+});
+
+test("custom record audit preserves ownership, creator, and creation date on edit", () => {
+  const original = customRecordAudit("creator", "2026-01-01T00:00:00.000Z");
+  const updated = customRecordAudit("editor", "2026-02-01T00:00:00.000Z", original);
+  assert.deepEqual(updated, { ...original, lastModifiedBy: "editor", updatedAt: "2026-02-01T00:00:00.000Z" });
 });
