@@ -1,0 +1,6 @@
+import {NextRequest,NextResponse} from "next/server";
+import {prisma} from "@/lib/prisma";
+import {validSession} from "@/lib/session";
+import {standardCatalog,defaultLayout} from "@/lib/setup-metadata";
+export const dynamic="force-dynamic";
+export async function GET(r:NextRequest){if(!await validSession(r.cookies.get("anu_session")?.value))return NextResponse.json({error:"Unauthorized"},{status:401});const entity=r.nextUrl.searchParams.get("entity")||"";if(!Object.prototype.hasOwnProperty.call(standardCatalog,entity))return NextResponse.json({error:"Unknown object"},{status:400});try{const [fields,layout,legacy,rules]=await Promise.all([prisma.customField.findMany({where:{entity}}),prisma.businessSetting.findUnique({where:{key:"setup.namedLayout."+entity+".default"}}),prisma.businessSetting.findUnique({where:{key:"setup.layout."+entity}}),prisma.businessSetting.findUnique({where:{key:"setup.validation."+entity}})]);const base=defaultLayout(entity,fields.map(f=>f.key));const named=layout?.value as {sections?:unknown}|null;return NextResponse.json({fields,sections:named?.sections||(Array.isArray(legacy?.value)?[base.sections[0],...legacy.value]:base.sections),rules:rules?.value||[]},{headers:{"Cache-Control":"no-store"}})}catch{return NextResponse.json({error:"Metadata unavailable"},{status:503})}}
