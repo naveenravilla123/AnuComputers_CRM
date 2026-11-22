@@ -72,6 +72,22 @@ export async function POST(request: NextRequest) {
         return { object };
       }
 
+      if (input.action === "addField" && definition) {
+        const config = definition.value as { name: string; lookup?: string | null; fields?: Field[] };
+        const fields = parseFields([...(config.fields ?? []), input.field]);
+        const field = fields[fields.length - 1];
+        if (["name", "owner", "created_by", "last_modified_by", "created_at", "updated_at", "lookup_id"].includes(field.key)) {
+          throw Error("Invalid fields");
+        }
+        await tx.businessSetting.update({
+          where: { key: definitionKey },
+          data: { value: { ...config, fields } },
+        });
+        await tx.auditLog.create({ data: { action: "CUSTOM_OBJECT_FIELD_ADDED", entity: object,
+          entityId: object, actorId, after: { field: field.key } } });
+        return { field: field.key };
+      }
+
       if (input.action !== "save" || !definition) throw Error("Unknown custom object or action");
       if (input.id !== undefined && (typeof input.id !== "string" || !/^[a-f0-9-]{36}$/.test(input.id))) {
         throw Error("Invalid record ID");
