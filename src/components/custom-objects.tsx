@@ -57,6 +57,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
   const [standard, setStandard] = useState("");
   const [query, setQuery] = useState("");
   const [fieldQuery, setFieldQuery] = useState("");
+  const [renameLabel,setRenameLabel]=useState<string|null>(null);
   const [newObject, setNewObject] = useState(false);
   const [editingField,setEditingField]=useState(false);
   const [fieldDraft, setFieldDraft] = useState<typeof emptyField | null>(null);
@@ -87,6 +88,8 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         setDefinition({ key: "", name: "", lookup: "" });
         setKeyEdited(false);
       }
+      if(result.deleted)setObject("");
+      setRenameLabel(null);
       resetRecord();
       setFieldDraft(null);
       setRevision(value => value + 1);
@@ -102,7 +105,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
     ...data.objects.map(item => ({ key: item.key, label: item.definition.name, custom: true })),
   ].sort((a,b) => a.label.localeCompare(b.label));
   const objectFields = standard
-    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: fieldLabel(item.key), custom: false })),
+    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: item.key === "createdAt" ? "Created Date" : item.key === "updatedAt" ? "Last Modified Date" : fieldLabel(item.key), custom: false })),
       ...standardFields.filter(item => item.entity === standard).map(item => ({ ...item, custom: true }))]
     : current ? [
       ...customObjectStandardFields.map(item => ({ ...item, required: item.key === "Name", custom: false })),
@@ -131,9 +134,29 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       </table>
     </>}
     {(standard || current || newObject) && <button type="button" className="text-indigo-700 hover:underline" disabled={busy || setupBusy}
-      onClick={() => { setStandard("");setObject("");setNewObject(false);setFieldDraft(null);resetRecord(); }}>← All Objects</button>}
+      onClick={() => { setStandard("");setObject("");setNewObject(false);setFieldDraft(null);setRenameLabel(null);resetRecord(); }}>← All Objects</button>}
     {(standard || current) && <>
-      <h3 className="text-xl font-semibold">{standard ? fieldLabel(standard) : current?.definition.name}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-xl font-semibold">{standard ? fieldLabel(standard) : current?.definition.name}</h3>
+        {current && <div className="flex gap-2">
+          <button type="button" className="rounded border px-3 py-2" disabled={busy}
+            onClick={() => setRenameLabel(current.definition.name)}>Edit Object</button>
+          <button type="button" className="rounded border px-3 py-2 text-red-700" disabled={busy} onClick={() => {
+            const confirmKey = window.prompt("Permanently delete this object and its records? Enter the object API name: " + object);
+            if (confirmKey === object) void save({ action: "deleteObject", object, name: current.definition.name, confirmKey });
+          }}>Delete Object</button>
+        </div>}
+      </div>
+      {standard && <p className="text-sm text-slate-600">Standard object and field definitions are managed by the CRM. Custom fields on this object can be edited or deleted.</p>}
+      {current && renameLabel !== null && <form className="space-y-2 rounded border p-3" onSubmit={event => {
+        event.preventDefault();
+        void save({ action: "rename", object, name: renameLabel });
+      }}>
+        <label>Object label <input className={input} required maxLength={100} value={renameLabel}
+          onChange={event=>setRenameLabel(event.target.value)} /></label>
+        <button className={button} disabled={busy}>Save Object</button>
+        <button type="button" className="ml-3" onClick={()=>setRenameLabel(null)}>Cancel</button>
+      </form>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h4 className="font-semibold">Fields &amp; Relationships</h4>
         {(current || editableObjects.includes(standard)) && <button type="button" className={button}
@@ -142,7 +165,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       {fieldDraft && <form className="space-y-2 rounded border p-3" onSubmit={async event => {
         event.preventDefault();
         if (current) {
-          await save({ action: "addField", object, name: current.definition.name,
+          await save({ action: editingField ? "editField" : "addField", object, name: current.definition.name,
             field: { key: fieldDraft.key, label: fieldDraft.label, type: fieldDraft.type, required: fieldDraft.required, options: fieldDraft.options.split("\n") } });
         } else if (await onFieldSave({ action: "field", entity: standard, ...fieldDraft })) setFieldDraft(null);
       }}>
@@ -160,11 +183,27 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       </form>}
       <label>Find a field <input className={input} value={fieldQuery} onChange={event => setFieldQuery(event.target.value)} /></label>
       <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-        <thead><tr>{["Field Label","API Name","Data Type","Origin","Required",...(editableObjects.includes(standard)?["Actions"]:[])].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead>
+        <thead><tr>{["Field Label","API Name","Data Type","Origin","Required",...((current || editableObjects.includes(standard))?["Actions"]:[])].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead>
         <tbody>{objectFields.filter(item => [item.label,item.key,item.type].join(" ").toLowerCase().includes(fieldQuery.trim().toLowerCase())).map(item =>
           <tr key={item.key} className="border-t">
             <td className="p-2">{item.label}</td><td className="p-2">{item.key}</td><td className="p-2">{item.type}</td>
             <td className="p-2">{item.custom ? "Custom" : "Standard"}</td><td className="p-2">{item.required ? "Yes" : "No"}</td>
+            {current && <td className="p-2">{(() => {
+              const existing = current.definition.fields?.find(field => field.key === item.key);
+              if (!existing || !item.custom || item.type.startsWith("Lookup")) return null;
+              return <div className="flex gap-2">
+                <button type="button" className="text-indigo-700" disabled={busy} onClick={() => {
+                  setEditingField(true);
+                  setFieldDraft({ key: existing.key, label: existing.label, type: normalizeFieldType(existing.type),
+                    required: existing.required ?? false, options: (existing.options ?? []).join("\n") });
+                }}>Edit</button>
+                <button type="button" className="text-red-700" disabled={busy} onClick={() => {
+                  if (window.confirm("Permanently delete this field and its values from all records?")) {
+                    void save({ action: "deleteField", object, name: current.definition.name, fieldKey: existing.key });
+                  }
+                }}>Delete</button>
+              </div>;
+            })()}</td>}
             {editableObjects.includes(standard) && <td className="p-2">{item.custom && (() => {
               const existing = standardFields.find(field => field.entity === standard && field.key === item.key);
               if (!existing) return null;

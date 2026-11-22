@@ -60,21 +60,69 @@ export async function POST(request: NextRequest) {
         return { object };
       }
 
-      if (input.action === "addField" && definition) {
+      if (definition && ["rename", "deleteObject", "addField", "editField", "deleteField"].includes(input.action)) {
         const config = definition.value as { name: string; lookup?: string | null; fields?: Field[] };
+        const recordWhere = { key: { startsWith: recordPrefix + object + "." } };
+        const audit = (action: string) => tx.auditLog.create({
+          data: { action, entity: object, entityId: object, actorId },
+        });
+
+        if (input.action === "deleteObject") {
+          const dependent = await tx.businessSetting.findFirst({
+            where: { key: { startsWith: definitionPrefix }, value: { path: ["lookup"], equals: object } },
+          });
+          if (dependent) throw Error("Another custom object has a lookup to this object");
+          const count = await tx.businessSetting.count({ where: recordWhere });
+          if (count && input.confirmKey !== object) throw Error("Confirm the object API name to delete its records");
+          await tx.businessSetting.deleteMany({ where: recordWhere });
+          await tx.businessSetting.delete({ where: { key: definitionKey } });
+          await audit("CUSTOM_OBJECT_DELETED");
+          return { deleted: true };
+        }
+
+        if (input.action === "rename") {
+          await tx.businessSetting.update({ where: { key: definitionKey }, data: { value: { ...config, name } } });
+          await audit("CUSTOM_OBJECT_RENAMED");
+          return { renamed: true };
+        }
+
         const existing = config.fields ?? [];
-        const fields = parseObjectFields([...existing, input.field], existing.length);
-        const field = fields[fields.length - 1];
-        if (field.required && await tx.businessSetting.count({
-          where: { key: { startsWith: recordPrefix + object + "." } },
-        })) throw Error("Add the field as optional because this object already has records");
+        const key = input.action === "deleteField" ? input.fieldKey : input.field?.key;
+        const prior = existing.find(field => field.key === key);
+        if (input.action !== "addField" && !prior) throw Error("Custom field not found");
+        const other = existing.filter(field => field.key !== key);
+        if (input.action === "addField" && prior) throw Error("Field API name already exists");
+        const fields = input.action === "deleteField" ? other
+          : parseObjectFields([...other, input.field], other.length);
+        const field = fields.find(item => item.key === key);
+        if (field) {
+          const records = await tx.businessSetting.findMany({ where: recordWhere, select: { value: true } });
+          for (const row of records) {
+            const values = (row.value as { values?: Record<string, unknown> }).values;
+            try {
+              validateObjectValues([field], values && Object.prototype.hasOwnProperty.call(values, key)
+                ? { [key]: values[key] } : {});
+            } catch {
+              throw Error("Existing records contain missing or incompatible values for this field");
+            }
+          }
+        } else {
+          await tx.$executeRaw`
+            UPDATE "BusinessSetting"
+            SET value = jsonb_set(value, '{values}', (value->'values') - ${key}::text)
+            WHERE starts_with("key", ${recordPrefix + object + "."})
+              AND jsonb_typeof(value->'values') = 'object'
+              AND (value->'values') ? ${key}::text
+          `;
+        }
+
         await tx.businessSetting.update({
           where: { key: definitionKey },
           data: { value: { ...config, fields } },
         });
-        await tx.auditLog.create({ data: { action: "CUSTOM_OBJECT_FIELD_ADDED", entity: object,
-          entityId: object, actorId, after: { field: field.key } } });
-        return { field: field.key };
+        await audit(input.action === "addField" ? "CUSTOM_OBJECT_FIELD_ADDED"
+          : input.action === "editField" ? "CUSTOM_OBJECT_FIELD_UPDATED" : "CUSTOM_OBJECT_FIELD_DELETED");
+        return { field: key };
       }
 
       if (input.action !== "save" || !definition) throw Error("Unknown custom object or action");
@@ -110,7 +158,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const messages = ["Object key already exists", "Unknown lookup object", "Unknown custom object or action",
-      "Invalid record ID", "Record not found", "Lookup record not found", "Invalid field definition", "Invalid field values", "Field API name is reserved", "Unsupported field type", "An object can have up to 30 custom fields", "Picklist requires 1–100 options of up to 255 characters", "Add the field as optional because this object already has records"];
+      "Invalid record ID", "Record not found", "Lookup record not found", "Invalid field definition", "Invalid field values", "Field API name is reserved", "Unsupported field type", "An object can have up to 30 custom fields", "Picklist requires 1–100 options of up to 255 characters", "Another custom object has a lookup to this object", "Confirm the object API name to delete its records", "Custom field not found", "Field API name already exists", "Existing records contain missing or incompatible values for this field"];
     return fail(error instanceof Error && (messages.includes(error.message) || /^(Invalid value:|Unknown field:)| is required$/.test(error.message)) ? error.message : "Unable to save custom object data", 409);
   }
 }
