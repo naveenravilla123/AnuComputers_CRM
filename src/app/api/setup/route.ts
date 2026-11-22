@@ -4,7 +4,7 @@ import {validSession} from "@/lib/session";
 import {permissionCatalog} from "@/lib/permissions";
 import {Prisma} from "@prisma/client";
 export const dynamic="force-dynamic";
-const objects=["Customer","Lead","Product","SalesOrder","Quote","ServiceCase","JobCard","Asset","Invoice","Supplier"];
+const objects=["Customer","Lead","Product","SalesOrder","Quote","ServiceCase","JobCard","Asset","Invoice","Supplier","Stock","PurchaseOrder","Payment"];
 const types=["TEXT","NUMBER","DATE","CHECKBOX","PICKLIST","EMAIL","PHONE","TEXTAREA"];
 const fail=(error:string,status=400)=>NextResponse.json({error},{status});
 export async function GET(r:NextRequest){if(!await validSession(r.cookies.get("anu_session")?.value))return fail("Unauthorized",401);try{const [fields,settings,business,branches,staff,audit]=await Promise.all([prisma.customField.findMany({orderBy:[{entity:"asc"},{label:"asc"}]}),prisma.businessSetting.findMany({where:{key:{startsWith:"setup."}}}),prisma.business.findUnique({where:{slug:"anu-computers"}}),prisma.branch.findMany(),prisma.staff.findMany(),prisma.auditLog.findMany({orderBy:{at:"desc"},take:100})]);return NextResponse.json({objects,types,fields,settings,business,branches,staff,audit},{headers:{"Cache-Control":"no-store"}})}catch{return fail("Database unavailable",503)}}
