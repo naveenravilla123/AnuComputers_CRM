@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { objectManagerCatalog } from "@/lib/object-manager-catalog";
 import { fieldLabel } from "@/lib/setup-metadata";
 
+import StandardRecords, { RecordDetails } from "./standard-records";
 import MetadataFields from "./metadata-fields";
 import { customFieldTypes, customObjectStandardFields, normalizeFieldType, type ObjectField as Field } from "@/lib/custom-object-fields";
 type Values = Record<string, string | number | boolean>;
@@ -54,6 +55,8 @@ type Props = {
 const emptyField = { key: "custom_", label: "", type: "TEXT", required: false, options: "" };
 
 export default function CustomObjects({ standardFields, editableObjects, fieldTypes, onFieldSave, busy: setupBusy }: Props) {
+  const [objectSection, setObjectSection] = useState<"fields"|"records">("fields");
+  const [openRecord, setOpenRecord] = useState("");
   const [standard, setStandard] = useState("");
   const [query, setQuery] = useState("");
   const [fieldQuery, setFieldQuery] = useState("");
@@ -70,6 +73,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
   const [error, setError] = useState("");
   const data = useRecords(object, revision);
   const current = data.objects.find(item => item.key === object);
+  const selectedRecord = data.records.find(row => row.id === openRecord);
   const related = useRecords(current?.definition.lookup ?? "", revision);
   const resetRecord = () => setDraft({ name: "", lookupId: "", values: {} });
 
@@ -84,6 +88,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       if (!response.ok) throw Error(result.error);
       if (result.object) {
         setObject(result.object);
+        setObjectSection("fields");
         setNewObject(false);
         setDefinition({ key: "", name: "", lookup: "" });
         setKeyEdited(false);
@@ -106,6 +111,8 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
   ].sort((a,b) => a.label.localeCompare(b.label));
   const objectFields = standard
     ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: item.key === "createdAt" ? "Created Date" : item.key === "updatedAt" ? "Last Modified Date" : fieldLabel(item.key), custom: false })),
+      ...customObjectStandardFields.filter(item => !["Id", "Name"].includes(item.key) && !objectManagerCatalog[standard].some(field => field.key === item.storage))
+        .map(item => ({...item, required: false, custom: false})),
       ...standardFields.filter(item => item.entity === standard).map(item => ({ ...item, custom: true }))]
     : current ? [
       ...customObjectStandardFields.map(item => ({ ...item, required: item.key === "Name", custom: false })),
@@ -126,7 +133,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         <tbody>{directory.filter(item => (item.key + " " + item.label).toLowerCase().includes(query.trim().toLowerCase())).map(item =>
           <tr className="border-t" key={String(item.custom) + item.key}>
             <td className="p-2"><button type="button" className="font-medium text-indigo-700 hover:underline" onClick={() => {
-              setFieldQuery("");setFieldDraft(null);
+              setFieldQuery("");setFieldDraft(null);setObjectSection("fields");
               if (item.custom) setObject(item.key); else setStandard(item.key);
             }}>{item.label}</button></td>
             <td>{item.key}</td><td>{item.custom ? "Custom" : "Standard"}</td>
@@ -134,7 +141,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       </table>
     </>}
     {(standard || current || newObject) && <button type="button" className="text-indigo-700 hover:underline" disabled={busy || setupBusy}
-      onClick={() => { setStandard("");setObject("");setNewObject(false);setFieldDraft(null);setRenameLabel(null);resetRecord(); }}>← All Objects</button>}
+      onClick={() => { setStandard("");setObject("");setNewObject(false);setFieldDraft(null);setRenameLabel(null);setOpenRecord("");resetRecord(); }}>← All Objects</button>}
     {(standard || current) && <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xl font-semibold">{standard ? fieldLabel(standard) : current?.definition.name}</h3>
@@ -157,6 +164,13 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         <button className={button} disabled={busy}>Save Object</button>
         <button type="button" className="ml-3" onClick={()=>setRenameLabel(null)}>Cancel</button>
       </form>}
+      <nav className="flex gap-2 border-b pb-2" aria-label="Object sections">
+        <button type="button" className={objectSection === "fields" ? button : "rounded border px-3 py-2"}
+          aria-pressed={objectSection === "fields"} onClick={()=>setObjectSection("fields")}>Fields &amp; Relationships</button>
+        <button type="button" className={objectSection === "records" ? button : "rounded border px-3 py-2"}
+          aria-pressed={objectSection === "records"} onClick={()=>setObjectSection("records")}>Records</button>
+      </nav>
+      {objectSection === "fields" && <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h4 className="font-semibold">Fields &amp; Relationships</h4>
         {(current || editableObjects.includes(standard)) && <button type="button" className={button}
@@ -220,7 +234,9 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
             })()}</td>}
           </tr>)}</tbody>
       </table></div>
+      </>}
     </>}
+    {standard && objectSection === "records" && <StandardRecords key={standard} entity={standard} customFields={standardFields.filter(item => item.entity === standard)} />}
     {newObject && <div>
       <h3 className="text-xl font-semibold">New Custom Object</h3>
       <form className="mt-3 space-y-2" onSubmit={event => {
@@ -251,7 +267,19 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         <button className={button} disabled={busy}>Create object</button>
       </form>
     </div>}
-    {current && <>
+    {current && objectSection === "records" && <>
+      <h4 className="border-t pt-4 font-semibold">Records</h4>
+      {selectedRecord && <section className="space-y-3 rounded border p-4">
+        <div className="flex justify-between gap-3">
+          <h5 className="font-semibold">{selectedRecord.record.name}</h5>
+          <button type="button" onClick={() => setOpenRecord("")}>Close Details</button>
+        </div>
+        <RecordDetails fields={[
+          ...customObjectStandardFields.map(field => ({label:field.label, value:field.storage === "id" ? selectedRecord.id : selectedRecord.record[field.storage]})),
+          ...(current.definition.lookup ? [{label:"Related record",value:related.records.find(row=>row.id===selectedRecord.record.lookupId)?.record.name ?? selectedRecord.record.lookupId}] : []),
+          ...(current.definition.fields ?? []).map(field => ({label:field.label,value:selectedRecord.record.values?.[field.key]})),
+        ]}/>
+      </section>}
       <form className="space-y-2" onSubmit={event => {
         event.preventDefault();
         void save({ action: "save", object, ...draft });
@@ -272,9 +300,10 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         {draft.id && <button type="button" className="ml-2" onClick={resetRecord}>Cancel edit</button>}
       </form>
       <div className="divide-y">{data.records.map(({ id, record }) => <article className="py-2" key={id}>
-        <button type="button" className="font-medium text-indigo-700" onClick={() => setDraft({
+        <button type="button" className="font-medium text-indigo-700" onClick={() => setOpenRecord(id)}>{record.name}</button>
+        <button type="button" className="ml-3 text-sm text-indigo-700" onClick={() => setDraft({
           id, name: record.name, lookupId: record.lookupId ?? "", values: record.values ?? {},
-        })}>{record.name}</button>
+        })}>Edit Record</button>
         <dl className="grid gap-1 text-sm sm:grid-cols-3">
           <div><dt>Owner</dt><dd>{record.owner ?? "—"}</dd></div>
           <div><dt>Created By</dt><dd>{record.createdBy ?? "—"}</dd></div>
