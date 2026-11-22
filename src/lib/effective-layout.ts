@@ -6,10 +6,14 @@ export async function effectiveLayout(
   entity: string,
   customKeys: string[],
   role?: string,
+  profileId?: string,
 ) {
-  const assignment = role && await db.businessSetting.findUnique({
-    where: { key: "setup.layoutAssignment." + role + "." + entity },
+  const profileAssignment = profileId && await db.businessSetting.findUnique({
+    where: { key: "setup.layoutAssignment." + profileId + "." + entity },
   });
+  const assignment = profileAssignment || (role && await db.businessSetting.findUnique({
+    where: { key: "setup.layoutAssignment." + role + "." + entity },
+  }));
   const assignedId = assignment && typeof assignment.value === "string" ? assignment.value : "default";
   const namedPrefix = "setup.namedLayout." + entity + ".";
   const legacyKey = "setup.layout." + entity;

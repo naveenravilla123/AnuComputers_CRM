@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const custom = definitions.filter(field => canRead("JobCard", field.key));
     const prefix = "custom.values.JobCard.";
     const [layout, stored] = await Promise.all([
-      effectiveLayout(prisma, "JobCard", custom.map(field => field.key), user.role),
+      effectiveLayout(prisma, "JobCard", custom.map(field => field.key), user.role, user.profileId),
       custom.length && jobs.length
         ? prisma.businessSetting.findMany({ where: { key: { in: jobs.map(job => prefix + job.id) } } })
         : [],
