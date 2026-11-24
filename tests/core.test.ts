@@ -38,6 +38,46 @@ test("staff need both object and field read access",()=>{
   assert.equal(canReadStaffField({permissions,fieldPermissions},"JobCard","diagnosis"),false);
 });
 
+test("staff workspace requests require the explicit staff request marker",async()=>{
+ const {isStaffWorkspaceRequest}=await import("../src/lib/staff-request-context");
+ const request=(marker?:string)=>new Request("https://crm.test/api/customers",{headers:marker?{"x-anu-workspace":marker}:{}});
+ assert.equal(isStaffWorkspaceRequest(request("staff")),true);
+ assert.equal(isStaffWorkspaceRequest(request("admin")),false);
+ assert.equal(isStaffWorkspaceRequest(request()),false);
+});
+
+test("read-only staff grants do not permit customer write actions",async()=>{
+ const {hasStaffPermission}=await import("../src/lib/staff-permission-check");
+ const {canEditStaffField}=await import("../src/lib/staff-field-access");
+ const user={permissions:["Customer:READ"],fieldPermissions:["Customer:name:READ"]};
+ assert.equal(hasStaffPermission(user,"Customer","READ"),true);
+ assert.equal(hasStaffPermission(user,"Customer","CREATE"),false);
+ assert.equal(hasStaffPermission(user,"Customer","EDIT"),false);
+ assert.equal(hasStaffPermission(user,"Customer","DELETE"),false);
+ assert.equal(canEditStaffField(user,"Customer","name"),false);
+});
+
+test("staff edit requires both object edit and field read plus edit grants",async()=>{
+ const {assertStaffFieldEdits,canEditStaffField,staffReadableFields}=await import("../src/lib/staff-field-access");
+ const user={permissions:["Product:READ","Product:EDIT"],fieldPermissions:["Product:name:READ","Product:name:EDIT","Product:cost:EDIT"]};
+ assert.equal(canEditStaffField(user,"Product","name"),true);
+ assert.equal(canEditStaffField(user,"Product","cost"),false);
+ assert.deepEqual(staffReadableFields(user,"Product",[{key:"name"},{key:"cost"}]),[{key:"name"}]);
+ assert.throws(()=>assertStaffFieldEdits(user,"Product",["cost"]),/Field edit permission required/);
+ assert.doesNotThrow(()=>assertStaffFieldEdits(user,"Product",["name"]));
+ assert.equal(canEditStaffField({...user,permissions:["Product:CREATE"]},"Product","name"),true);
+});
+
+test("staff response filtering removes ungranted fields and nested records",async()=>{
+ const {filterStaffRecord}=await import("../src/lib/staff-field-access");
+ const user={permissions:["SalesOrder:READ","Customer:READ"],fieldPermissions:["SalesOrder:number:READ","Customer:name:READ"]};
+ const row={id:"order-1",number:"SO-1",total:120,items:[{id:"item-1",cost:50}],customer:{id:"customer-1",name:"Customer",phone:"secret"}};
+ assert.deepEqual(filterStaffRecord(user,"SalesOrder",row),{
+  id:"order-1",number:"SO-1",items:[{id:"item-1"}],customer:{id:"customer-1",name:"Customer"},
+ });
+ assert.equal(filterStaffRecord({...user,permissions:[]},"SalesOrder",row),null);
+});
+
 test("profile layout takes priority and a stale assignment falls back to the default",async()=>{
   const profileSections=[{name:"Technician",columns:1,fields:["status"]}];
   const defaultSections=[{name:"Default",columns:2,fields:["status","notes"]}];
@@ -76,4 +116,100 @@ test("custom record audit preserves ownership, creator, and creation date on edi
   const original = customRecordAudit("creator", "2026-01-01T00:00:00.000Z");
   const updated = customRecordAudit("editor", "2026-02-01T00:00:00.000Z", original);
   assert.deepEqual(updated, { ...original, lastModifiedBy: "editor", updatedAt: "2026-02-01T00:00:00.000Z" });
+});
+
+
+test("lookup and additional field types validate their definitions and values", () => {
+  const fields = parseObjectFields([
+    {key:"parent",label:"Parent",type:"LOOKUP",target:"supplier"},
+    {key:"website",label:"Website",type:"URL"},
+    {key:"price",label:"Price",type:"CURRENCY"},
+    {key:"rate",label:"Rate",type:"PERCENT"},
+    {key:"meeting",label:"Meeting",type:"DATETIME"},
+  ]);
+  const values = {parent:"12345678-1234-1234-1234-123456789abc",website:"https://example.com",price:12.5,rate:5,meeting:"2026-11-22T12:30"};
+  assert.deepEqual(validateObjectValues(fields, values), values);
+  assert.throws(() => parseObjectFields([{key:"parent",label:"Parent",type:"LOOKUP"}]), /lookup object/);
+  assert.throws(() => validateObjectValues(fields, {...values, website:"javascript:alert(1)"}), /Invalid value/);
+});
+
+
+test("layout fields can move between sections and reorder without duplication", async () => {
+  const {moveLayoutField}=await import("../src/lib/layout-editor");
+  const sections=[{name:"A",columns:2,fields:["a","b","c"]},{name:"B",columns:1,fields:["d"]}];
+  assert.deepEqual(moveLayoutField(sections,"a",0,3)[0].fields,["b","c","a"]);
+  assert.deepEqual(moveLayoutField(sections,"b",1,0).map(s=>s.fields),[["a","c"],["b","d"]]);
+  assert.deepEqual(sections[0].fields,["a","b","c"]);
+});
+
+
+test("layouts hide omitted optional fields while retaining required fields",()=>{
+ const sections=[{name:"Main",columns:2,fields:["name"]}];
+ assert.deepEqual(resolveLayout(sections,["name","optional","required"],"Required fields",{hideUnplaced:true,required:["required"]}),[{name:"Main",columns:2,fields:["name"]},{name:"Required fields",columns:2,fields:["required"]}]);
+ assert.deepEqual(resolveLayout(null,["name"],"Required fields",{hideUnplaced:true}),[{name:"Required fields",columns:2,fields:["name"]}]);
+});
+
+
+test("standard required overrides reject blank values and accept present values",async()=>{
+ const {validateStandardOverrides}=await import("../src/lib/standard-field-overrides");
+ const db={businessSetting:{findUnique:async()=>({value:{serialNumber:{label:"Serial",required:true}}})}} as unknown as Parameters<typeof validateStandardOverrides>[0];
+ await assert.rejects(()=>validateStandardOverrides(db,"Asset",{serialNumber:"   "}),/Serial is required/);
+ await assert.doesNotReject(()=>validateStandardOverrides(db,"Asset",{serialNumber:"ABC"}));
+});
+
+
+test("validation import selects custom fields belonging to the configured object",()=>{
+ const rule={field:"lead_note__c",operator:"required",operand:"",message:"Required",enabled:true};
+ assert.doesNotThrow(()=>parseValidationRules("Lead",[rule],["lead_note__c"]));
+ assert.throws(()=>parseValidationRules("Lead",[rule],["customer_note__c"]),/Invalid rule/);
+});
+
+
+test("validation bundle validates each object before performing any writes",async()=>{
+ const {importValidationRules}=await import("../src/lib/import-validation-bundle");
+ const writes:string[]=[];
+ const tx={customField:{findMany:async()=>[{entity:"Customer",key:"customer_note__c"},{entity:"Lead",key:"lead_note__c"}]},businessSetting:{upsert:async(x:{where:{key:string}})=>{writes.push(x.where.key)}},auditLog:{create:async()=>{writes.push("audit")}}} as unknown as Parameters<typeof importValidationRules>[0];
+ const rule=(field:string)=>[{field,operator:"required",operand:"",message:"Required",enabled:true}];
+ await assert.rejects(()=>importValidationRules(tx,[["Customer",rule("customer_note__c")],["Lead",rule("customer_note__c")]]),/Invalid rule/);
+ assert.deepEqual(writes,[]);
+ await importValidationRules(tx,[["Customer",rule("customer_note__c")],["Lead",rule("lead_note__c")]]);
+ assert.deepEqual(writes,["setup.validation.Customer","setup.validation.Lead","audit"]);
+});
+
+
+test("Asset rules accept their own custom fields and reject unrelated fields",()=>{
+ const rule={field:"device_note__c",operator:"required",operand:"",message:"Enter a note",enabled:true};
+ assert.doesNotThrow(()=>parseValidationRules("Asset",[rule],["device_note__c"]));
+ assert.throws(()=>parseValidationRules("Asset",[rule],["customer_note__c"]),/Invalid rule/);
+ assert.throws(()=>validateRules([rule],{}),/Enter a note/);
+ assert.doesNotThrow(()=>validateRules([rule],{device_note__c:"ready"}));
+});
+
+
+test("product custom values preserve stored values and validate before saving",async()=>{
+ const {saveRecordCustomValues}=await import("../src/lib/save-record-custom-values");
+ let saved:unknown;
+ const tx={customField:{findMany:async()=>[{key:"code__c",label:"Code",type:"NUMBER",required:true,options:[]},{key:"notes__c",label:"Notes",type:"TEXT",required:false,options:[]}]},businessSetting:{findUnique:async()=>({value:{code__c:4}}),upsert:async(x:{update:{value:unknown}})=>{saved=x.update.value}}} as unknown as Parameters<typeof saveRecordCustomValues>[0];
+ await saveRecordCustomValues(tx,"Product","id",undefined);
+ assert.deepEqual(saved,{code__c:4});
+ saved=undefined;
+ await assert.rejects(()=>saveRecordCustomValues(tx,"Product","id",{code__c:"bad"}),/Invalid value/);
+ assert.equal(saved,undefined);
+ await saveRecordCustomValues(tx,"Product","id",{notes__c:"updated"},{permissions:["Product:EDIT"],fieldPermissions:["Product:notes__c:READ","Product:notes__c:EDIT"]});
+ assert.deepEqual(saved,{code__c:4,notes__c:"updated"});
+});
+
+
+test("field dependencies identify saved layouts and remove only matching grants",async()=>{
+ const {layoutUsesField,removeFieldGrants}=await import("../src/lib/field-dependencies");
+ assert.equal(layoutUsesField({sections:[{fields:["asset__c"]}]},"asset__c"),true);
+ assert.equal(layoutUsesField([{fields:["asset__c"]}],"other__c"),false);
+ assert.deepEqual(removeFieldGrants(["Asset:asset__c:READ","Asset:asset__c:EDIT","Customer:asset__c:READ","Asset:asset_extra__c:READ"],"Asset","asset__c"),["Customer:asset__c:READ","Asset:asset_extra__c:READ"]);
+});
+
+test("staff permission helper requires the exact object action",async()=>{
+ const {hasStaffPermission}=await import("../src/lib/staff-permission-check");
+ assert.equal(hasStaffPermission({permissions:["Product:READ","Product:EDIT"]},"Product","READ"),true);
+ assert.equal(hasStaffPermission({permissions:["Product:READ"]},"Product","EDIT"),false);
+ assert.equal(hasStaffPermission(null,"Product","READ"),false);
 });

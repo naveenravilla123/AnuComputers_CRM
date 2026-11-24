@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       const visibleKeys = Object.keys(standard).filter(key => canRead("JobCard", key));
       const values = storedById.get(job.id);
       const customValues = values && typeof values === "object" && !Array.isArray(values) ? values : {};
-      const sections = resolveLayout(layout, [...visibleKeys, ...custom.map(field => field.key)]).map(section => ({
+      const sections = resolveLayout(layout, [...visibleKeys, ...custom.map(field => field.key)], "Required fields", { hideUnplaced: true, required: custom.filter(field => field.required).map(field => field.key) }).map(section => ({
         name: section.name,
         columns: section.columns,
         fields: section.fields.map(key => ({

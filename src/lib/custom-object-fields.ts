@@ -1,6 +1,7 @@
+import { objectManagerCatalog } from "./object-manager-catalog";
 import { validateCustom } from "./custom-validation";
 
-export const customFieldTypes = ["TEXT", "TEXTAREA", "NUMBER", "CHECKBOX", "DATE", "EMAIL", "PHONE", "PICKLIST"] as const;
+export const customFieldTypes = ["TEXT", "TEXTAREA", "NUMBER", "CHECKBOX", "DATE", "EMAIL", "PHONE", "PICKLIST", "URL", "DATETIME", "CURRENCY", "PERCENT", "LOOKUP"] as const;
 export const customObjectStandardFields = [
   { key: "Id", label: "Record ID", storage: "id", type: "ID" },
   { key: "Name", label: "Record Name", storage: "name", type: "TEXT" },
@@ -11,7 +12,7 @@ export const customObjectStandardFields = [
   { key: "OwnerId", label: "Owner", storage: "owner", type: "User" },
 ] as const;
 
-export type ObjectField = { key: string; label: string; type: string; required?: boolean; options?: string[] };
+export type ObjectField = { key: string; label: string; type: string; required?: boolean; options?: string[]; target?: string };
 export type FieldValue = string | number | boolean;
 
 export const validObjectKey = (value: unknown): value is string =>
@@ -39,8 +40,9 @@ export function parseObjectFields(input: unknown, legacyCount = 0): ObjectField[
     if (type === "PICKLIST" && (!options.length || options.length > 100 || options.some(option => option.length > 255))) {
       throw Error("Picklist requires 1–100 options of up to 255 characters");
     }
+    if (type === "LOOKUP" && !validObjectKey(field.target) && !Object.prototype.hasOwnProperty.call(objectManagerCatalog, field.target)) throw Error("Select a valid lookup object");
     keys.add(field.key);
-    return { key: field.key, label: field.label.trim(), type, required: field.required === true, options };
+    return { key: field.key, label: field.label.trim(), type, required: field.required === true, options, ...(type === "LOOKUP" ? { target: field.target } : {}) };
   });
 }
 

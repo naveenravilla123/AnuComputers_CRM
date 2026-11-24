@@ -1,3 +1,4 @@
+import {lookupTargetExists, lookupRecordExists} from "@/lib/lookup-targets";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validSession } from "@/lib/session";
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
   try {
     const object = request.nextUrl.searchParams.get("object");
     if (object !== null && !validKey(object)) return fail("Invalid object key", 400);
+    const parentId = request.nextUrl.searchParams.get("parentId");
+    if (parentId && (!object || !/^[a-f0-9-]{36}$/.test(parentId))) return fail("Invalid record ID", 400);
     const [definitions, records] = await Promise.all([
       prisma.businessSetting.findMany({ where: { key: { startsWith: definitionPrefix } }, orderBy: { key: "asc" } }),
       object ? prisma.businessSetting.findMany({
@@ -24,7 +27,24 @@ export async function GET(request: NextRequest) {
         orderBy: { key: "asc" }, take: 200,
       }) : [],
     ]);
+    let relatedLists: { object: string; label: string; field: string; records: { id: string; name: string }[]; truncated: boolean }[] = [];
+    if (object && parentId) {
+      for (const row of definitions) {
+        const child = row.key.slice(definitionPrefix.length);
+        const config = row.value as { name?: string; lookup?: string; fields?: Field[] };
+        const relations = [
+          ...(config.lookup === object ? [{ key: "lookupId", label: "Related record" }] : []),
+          ...(config.fields ?? []).filter(field => field.type === "LOOKUP" && field.target === object).map(field => ({ key: field.key, label: field.label })),
+        ];
+        for (const relation of relations) {
+          const path = relation.key === "lookupId" ? ["lookupId"] : ["values", relation.key];
+          const children = await prisma.businessSetting.findMany({ where: { key: { startsWith: recordPrefix + child + "." }, value: { path, equals: parentId } }, orderBy: { key: "asc" }, take: 201 });
+          relatedLists.push({ object: child, label: config.name ?? child, field: relation.label, truncated: children.length > 200, records: children.slice(0, 200).map(item => ({ id: item.key.slice((recordPrefix + child + ".").length), name: String((item.value as { name?: string }).name ?? "") })) });
+        }
+      }
+    }
     return NextResponse.json({
+      relatedLists,
       objects: definitions.map(row => ({ key: row.key.slice(definitionPrefix.length), definition: { ...(row.value as object), standardFields: customObjectStandardFields } })),
       records: records.map(row => ({ id: row.key.slice(recordPrefix.length + (object?.length ?? 0) + 1), record: row.value })),
     }, { headers: { "Cache-Control": "no-store" } });
@@ -50,6 +70,7 @@ export async function POST(request: NextRequest) {
       const definition = await tx.businessSetting.findUnique({ where: { key: definitionKey } });
       if (input.action === "define") {
         if (definition) throw Error("Object key already exists");
+        if (!/^[a-z][a-z0-9_]{0,36}__c$/.test(object)) throw Error("Custom API name must end in __c");
         const lookup = input.lookup || null;
         if (lookup !== null && (!validKey(lookup) || !await tx.businessSetting.findUnique({
           where: { key: definitionPrefix + lookup },
@@ -71,7 +92,10 @@ export async function POST(request: NextRequest) {
           const dependent = await tx.businessSetting.findFirst({
             where: { key: { startsWith: definitionPrefix }, value: { path: ["lookup"], equals: object } },
           });
-          if (dependent) throw Error("Another custom object has a lookup to this object");
+          const allDefinitions = await tx.businessSetting.findMany({ where: { key: { startsWith: definitionPrefix } } });
+          if (dependent || allDefinitions.some(row => row.key !== definitionKey && ((row.value as { fields?: Field[] }).fields ?? []).some(field => field.type === "LOOKUP" && field.target === object))) throw Error("Another custom object has a lookup to this object");
+          const standardLookups = await tx.customField.findMany({ where: { type: "LOOKUP" } });
+          if (standardLookups.some(field => Array.isArray(field.options) && field.options[0] === object)) throw Error("Another custom object has a lookup to this object");
           const count = await tx.businessSetting.count({ where: recordWhere });
           if (count && input.confirmKey !== object) throw Error("Confirm the object API name to delete its records");
           await tx.businessSetting.deleteMany({ where: recordWhere });
@@ -92,16 +116,19 @@ export async function POST(request: NextRequest) {
         if (input.action !== "addField" && !prior) throw Error("Custom field not found");
         const other = existing.filter(field => field.key !== key);
         if (input.action === "addField" && prior) throw Error("Field API name already exists");
+        if (input.action === "addField" && (typeof key !== "string" || !/^[a-z][a-z0-9_]{0,36}__c$/.test(key))) throw Error("Custom API name must end in __c");
         const fields = input.action === "deleteField" ? other
           : parseObjectFields([...other, input.field], other.length);
         const field = fields.find(item => item.key === key);
         if (field) {
+          if (field.type === "LOOKUP" && !await lookupTargetExists(tx,field.target!)) throw Error("Unknown lookup object");
           const records = await tx.businessSetting.findMany({ where: recordWhere, select: { value: true } });
           for (const row of records) {
             const values = (row.value as { values?: Record<string, unknown> }).values;
             try {
               validateObjectValues([field], values && Object.prototype.hasOwnProperty.call(values, key)
                 ? { [key]: values[key] } : {});
+              if (field.type === "LOOKUP" && values?.[key] && !await lookupRecordExists(tx,field.target!,String(values[key]))) throw Error("Invalid lookup");
             } catch {
               throw Error("Existing records contain missing or incompatible values for this field");
             }
@@ -136,6 +163,10 @@ export async function POST(request: NextRequest) {
       const config = definition.value as { lookup?: string; fields?: Field[] };
       const target = config.lookup;
       const values = validateObjectValues(config.fields ?? [], input.values ?? {});
+      for (const field of config.fields ?? []) {
+        const value = values[field.key];
+        if (field.type === "LOOKUP" && value && !await lookupRecordExists(tx,field.target!,String(value))) throw Error("Lookup record not found");
+      }
       const lookupId = input.lookupId || null;
       if (lookupId !== null && (typeof lookupId !== "string" || !target || !await tx.businessSetting.findUnique({
         where: { key: recordPrefix + target + "." + lookupId },
@@ -157,8 +188,8 @@ export async function POST(request: NextRequest) {
     }, { isolationLevel: "Serializable" });
     return NextResponse.json(result);
   } catch (error) {
-    const messages = ["Object key already exists", "Unknown lookup object", "Unknown custom object or action",
-      "Invalid record ID", "Record not found", "Lookup record not found", "Invalid field definition", "Invalid field values", "Field API name is reserved", "Unsupported field type", "An object can have up to 30 custom fields", "Picklist requires 1–100 options of up to 255 characters", "Another custom object has a lookup to this object", "Confirm the object API name to delete its records", "Custom field not found", "Field API name already exists", "Existing records contain missing or incompatible values for this field"];
+    const messages = ["Custom API name must end in __c", "Object key already exists", "Unknown lookup object", "Unknown custom object or action",
+      "Select a valid lookup object", "Invalid record ID", "Record not found", "Lookup record not found", "Invalid field definition", "Invalid field values", "Field API name is reserved", "Unsupported field type", "An object can have up to 30 custom fields", "Picklist requires 1–100 options of up to 255 characters", "Another custom object has a lookup to this object", "Confirm the object API name to delete its records", "Custom field not found", "Field API name already exists", "Existing records contain missing or incompatible values for this field"];
     return fail(error instanceof Error && (messages.includes(error.message) || /^(Invalid value:|Unknown field:)| is required$/.test(error.message)) ? error.message : "Unable to save custom object data", 409);
   }
 }

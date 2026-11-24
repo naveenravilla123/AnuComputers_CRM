@@ -1,9 +1,12 @@
-import {NextResponse} from "next/server";
+import {NextRequest,NextResponse} from "next/server";
 import {prisma} from "@/lib/prisma";
-import {authorized} from "@/lib/api-auth";
+import {authorizeAll} from "@/lib/request-access";
+import {canReadStaffFields} from "@/lib/staff-field-access";
 export const dynamic="force-dynamic";
-export async function GET(request:Request){
- if(!authorized(request))return NextResponse.json({error:"Unauthorized"},{status:401});
+export async function GET(request:NextRequest){
+ const auth=await authorizeAll(request,[{object:"Invoice",action:"READ"},{object:"Customer",action:"READ"},{object:"Product",action:"READ"},{object:"ServiceCase",action:"READ"}]);
+ if(!auth.allowed)return NextResponse.json({error:auth.status===401?"Unauthorized":"Forbidden"},{status:auth.status});
+ if(auth.access.kind==="staff"&&!canReadStaffFields(auth.access.user,[["Invoice","total"],["Invoice","status"],["Invoice","orderId"],["Invoice","caseId"],["ServiceCase","status"]]))return NextResponse.json({error:"Forbidden"},{status:403});
  try{
  const [customers,products,services,sales,service,activeRepairs]=await Promise.all([
  prisma.customer.count(),prisma.product.count(),prisma.serviceCase.count(),

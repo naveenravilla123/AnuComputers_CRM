@@ -1,5 +1,7 @@
 import {prisma} from "@/lib/prisma";
-export const permissionObjects=["Customer","Lead","Product","SalesOrder","Quote","ServiceCase","JobCard","Asset","Invoice","Supplier","Stock","PurchaseOrder","Payment","Warranty","Communication","Staff"] as const;
+import {hasStaffPermission} from "./staff-permission-check";
+export const permissionObjects=["Customer","Lead","Product","SalesOrder","Quote","ServiceCase","JobCard","Asset","Invoice","Supplier","Stock","PurchaseOrder","Payment","Warranty","Communication","Staff","Branch"] as const;
+export type PermissionObject=typeof permissionObjects[number];
 export const permissionActions=["READ","CREATE","EDIT","DELETE"] as const;
 export const staffRoles=["SALES","TECHNICIAN","INVENTORY","FINANCE"] as const;
 export const permissionCatalog=permissionObjects.flatMap(o=>permissionActions.map(a=>o+":"+a));

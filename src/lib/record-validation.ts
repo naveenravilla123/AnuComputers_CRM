@@ -1,3 +1,4 @@
+import {validateStandardOverrides} from "./standard-field-overrides";
 import type { Prisma } from "@prisma/client";
 import { validateRules, validationEntities } from "./metadata-runtime";
 
@@ -9,6 +10,7 @@ export async function validateRecord(
   entity: Entity,
   record: Record<string, unknown> & { id: string },
 ) {
+  await validateStandardOverrides(tx,entity,record);
   const setting = await tx.businessSetting.findUnique({
     where: { key: "setup.validation." + entity },
   });

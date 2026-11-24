@@ -6,6 +6,8 @@ import { fieldLabel } from "@/lib/setup-metadata";
 
 import StandardRecords, { RecordDetails } from "./standard-records";
 import MetadataFields from "./metadata-fields";
+import CustomLookup from "./custom-lookup";
+import {editableStandardFields} from "@/lib/standard-field-overrides";
 import { customFieldTypes, customObjectStandardFields, normalizeFieldType, type ObjectField as Field } from "@/lib/custom-object-fields";
 type Values = Record<string, string | number | boolean>;
 type CustomObject = { key: string; definition: { name: string; lookup: string | null; fields?: Field[] } };
@@ -41,20 +43,26 @@ function useRecords(object: string, revision: number) {
   return { ...data, error };
 }
 
+function displayType(key: string, type: string) {
+  if (type === "String") return key === "id" ? "ID" : key.endsWith("Id") ? "Record ID" : /email/i.test(key) ? "Email" : /phone/i.test(key) ? "Phone" : "Text";
+  return ({ DateTime: "Date/Time", Decimal: "Decimal", Int: "Number", Boolean: "Checkbox", Json: "JSON" } as Record<string, string>)[type] ?? type;
+}
+
 const input = "block w-full rounded border p-2";
 const button = "rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-50";
 
 type StandardField = { id: string; entity: string; key: string; label: string; type: string; required: boolean; options: string[] };
 type Props = {
+  settings: {key:string;value:unknown}[];
   standardFields: StandardField[];
   editableObjects: string[];
   fieldTypes: string[];
   onFieldSave: (payload: Record<string, unknown>) => Promise<boolean | undefined>;
   busy: boolean;
 };
-const emptyField = { key: "custom_", label: "", type: "TEXT", required: false, options: "" };
+const emptyField = { key: "", label: "", type: "TEXT", required: false, options: "", target: "" };
 
-export default function CustomObjects({ standardFields, editableObjects, fieldTypes, onFieldSave, busy: setupBusy }: Props) {
+export default function CustomObjects({ settings, standardFields, editableObjects, fieldTypes, onFieldSave, busy: setupBusy }: Props) {
   const [objectSection, setObjectSection] = useState<"fields"|"records">("fields");
   const [openRecord, setOpenRecord] = useState("");
   const [standard, setStandard] = useState("");
@@ -63,6 +71,8 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
   const [renameLabel,setRenameLabel]=useState<string|null>(null);
   const [newObject, setNewObject] = useState(false);
   const [editingField,setEditingField]=useState(false);
+  const [fieldKeyEdited,setFieldKeyEdited]=useState(false);
+  const [standardDraft,setStandardDraft]=useState<{key:string;label:string;required:boolean}|null>(null);
   const [fieldDraft, setFieldDraft] = useState<typeof emptyField | null>(null);
   const [object, setObject] = useState("");
   const [revision, setRevision] = useState(0);
@@ -109,16 +119,17 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
     ...Object.keys(objectManagerCatalog).map(key => ({ key, label: fieldLabel(key), custom: false })),
     ...data.objects.map(item => ({ key: item.key, label: item.definition.name, custom: true })),
   ].sort((a,b) => a.label.localeCompare(b.label));
+  const standardOverrides=(settings.find(item=>item.key==="setup.standardFields."+standard)?.value ?? {}) as Record<string,{label:string;required:boolean}>;
   const objectFields = standard
-    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: item.key === "createdAt" ? "Created Date" : item.key === "updatedAt" ? "Last Modified Date" : fieldLabel(item.key), custom: false })),
+    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: standardOverrides[item.key]?.label ?? (item.key === "createdAt" ? "Created Date" : item.key === "updatedAt" ? "Last Modified Date" : fieldLabel(item.key)), required: standardOverrides[item.key]?.required ?? item.required, custom: false })),
       ...customObjectStandardFields.filter(item => !["Id", "Name"].includes(item.key) && !objectManagerCatalog[standard].some(field => field.key === item.storage))
         .map(item => ({...item, required: false, custom: false})),
-      ...standardFields.filter(item => item.entity === standard).map(item => ({ ...item, custom: true }))]
+      ...standardFields.filter(item => item.entity === standard).map(item => ({ ...item, type: item.type === "LOOKUP" ? "Lookup ? " + item.options?.[0] : item.type, custom: true }))]
     : current ? [
       ...customObjectStandardFields.map(item => ({ ...item, required: item.key === "Name", custom: false })),
       ...(current.definition.lookup ? [{ key: "lookupId", label: "Related record",
         type: "Lookup → " + current.definition.lookup, required: false, custom: true }] : []),
-      ...(current.definition.fields ?? []).map(item => ({ ...item, type: normalizeFieldType(item.type), custom: true })),
+      ...(current.definition.fields ?? []).map(item => ({ ...item, type: item.type === "LOOKUP" ? "Lookup ? " + item.target : normalizeFieldType(item.type), custom: true })),
     ] : [];
 
   return <section className="space-y-4 rounded-xl border bg-white p-4">
@@ -154,7 +165,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
           }}>Delete Object</button>
         </div>}
       </div>
-      {standard && <p className="text-sm text-slate-600">Standard object and field definitions are managed by the CRM. Custom fields on this object can be edited or deleted.</p>}
+      {standard && <p className="text-sm text-slate-600">Standard fields cannot be deleted. Editable fields can have their labels and required settings changed; CRM-required fields remain required.</p>}
       {current && renameLabel !== null && <form className="space-y-2 rounded border p-3" onSubmit={event => {
         event.preventDefault();
         void save({ action: "rename", object, name: renameLabel });
@@ -174,20 +185,22 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h4 className="font-semibold">Fields &amp; Relationships</h4>
         {(current || editableObjects.includes(standard)) && <button type="button" className={button}
-          onClick={() => {setEditingField(false);setFieldDraft(current ? { ...emptyField, key: "", type: "TEXT" } : { ...emptyField });}}>New Field</button>}
+          onClick={() => {setEditingField(false);setFieldKeyEdited(false);setFieldDraft(current ? { ...emptyField, key: "", type: "TEXT" } : { ...emptyField });}}>New Field</button>}
       </div>
+      {standardDraft && <form className="space-y-2 rounded border p-3" onSubmit={async event=>{event.preventDefault();if(await onFieldSave({action:"standardField",entity:standard,...standardDraft}))setStandardDraft(null)}}><h5 className="font-semibold">Edit standard field</h5><label>Field label <input className={input} required maxLength={100} value={standardDraft.label} onChange={event=>setStandardDraft({...standardDraft,label:event.target.value})}/></label><label className="block"><input type="checkbox" checked={standardDraft.required} disabled={editableStandardFields[standard]?.[standardDraft.key]===true} onChange={event=>setStandardDraft({...standardDraft,required:event.target.checked})}/> Required</label>{editableStandardFields[standard]?.[standardDraft.key]===true&&<p className="text-sm text-slate-600">This field is required by the CRM and cannot be optional.</p>}<button className={button} disabled={setupBusy}>Save field</button><button type="button" className="ml-3" onClick={()=>setStandardDraft(null)}>Cancel</button></form>}
       {fieldDraft && <form className="space-y-2 rounded border p-3" onSubmit={async event => {
         event.preventDefault();
         if (current) {
           await save({ action: editingField ? "editField" : "addField", object, name: current.definition.name,
-            field: { key: fieldDraft.key, label: fieldDraft.label, type: fieldDraft.type, required: fieldDraft.required, options: fieldDraft.options.split("\n") } });
+            field: { key: fieldDraft.key, label: fieldDraft.label, type: fieldDraft.type, required: fieldDraft.required, options: fieldDraft.options.split("\n"), target: fieldDraft.target } });
         } else if (await onFieldSave({ action: "field", entity: standard, ...fieldDraft })) setFieldDraft(null);
       }}>
-        <label>Field label <input required className={input} value={fieldDraft.label} onChange={event => setFieldDraft({ ...fieldDraft, label: event.target.value })} /></label>
-        <label>API name <input readOnly={editingField} required pattern={current ? "[a-z][a-z0-9_]{0,39}" : "custom_[a-z][a-z0-9_]{0,59}"} className={input} value={fieldDraft.key}
-          onChange={event => setFieldDraft({ ...fieldDraft, key: event.target.value })} /></label>
+        <label>Field label <input required className={input} value={fieldDraft.label} onChange={event => setFieldDraft({ ...fieldDraft, label: event.target.value, ...(!editingField && !fieldKeyEdited ? {key: (event.target.value.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^[^a-z]+|_+$/g,"").slice(0,37) || "") + "__c"} : {}) })} /></label>
+        <label>API name <input readOnly={editingField} required pattern={editingField ? undefined : "[a-z][a-z0-9_]{0,36}__c"} className={input} value={fieldDraft.key}
+          onChange={event => {setFieldKeyEdited(true);setFieldDraft({ ...fieldDraft, key: event.target.value });}} /></label>
         <label>Type <select className={input} value={fieldDraft.type} onChange={event => setFieldDraft({ ...fieldDraft, type: event.target.value })}>
           {(current ? customFieldTypes : fieldTypes).map(type => <option key={type}>{type}</option>)}</select></label>
+        {fieldDraft.type === "LOOKUP" && <label>Related object <select required className={input} value={fieldDraft.target} onChange={event => setFieldDraft({ ...fieldDraft, target: event.target.value })}><option value="">Select an object</option><optgroup label="Standard objects">{Object.keys(objectManagerCatalog).map(key => <option key={key} value={key}>{fieldLabel(key)}</option>)}</optgroup><optgroup label="Custom objects">{data.objects.map(item => <option key={item.key} value={item.key}>{item.definition.name}</option>)}</optgroup></select></label>}
         {fieldDraft.type === "PICKLIST" && <label>Options (one per line) <textarea required className={input} value={fieldDraft.options}
           onChange={event => setFieldDraft({ ...fieldDraft, options: event.target.value })} /></label>}
         {<label className="block"><input type="checkbox" checked={fieldDraft.required}
@@ -200,16 +213,16 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         <thead><tr>{["Field Label","API Name","Data Type","Origin","Required",...((current || editableObjects.includes(standard))?["Actions"]:[])].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead>
         <tbody>{objectFields.filter(item => [item.label,item.key,item.type].join(" ").toLowerCase().includes(fieldQuery.trim().toLowerCase())).map(item =>
           <tr key={item.key} className="border-t">
-            <td className="p-2">{item.label}</td><td className="p-2">{item.key}</td><td className="p-2">{item.type}</td>
+            <td className="p-2">{item.label}</td><td className="p-2">{item.key}</td><td className="p-2">{displayType(item.key, item.type)}</td>
             <td className="p-2">{item.custom ? "Custom" : "Standard"}</td><td className="p-2">{item.required ? "Yes" : "No"}</td>
             {current && <td className="p-2">{(() => {
               const existing = current.definition.fields?.find(field => field.key === item.key);
-              if (!existing || !item.custom || item.type.startsWith("Lookup")) return null;
+              if (!existing || !item.custom) return null;
               return <div className="flex gap-2">
                 <button type="button" className="text-indigo-700" disabled={busy} onClick={() => {
                   setEditingField(true);
                   setFieldDraft({ key: existing.key, label: existing.label, type: normalizeFieldType(existing.type),
-                    required: existing.required ?? false, options: (existing.options ?? []).join("\n") });
+                    required: existing.required ?? false, options: (existing.options ?? []).join("\n"), target: existing.target ?? "" });
                 }}>Edit</button>
                 <button type="button" className="text-red-700" disabled={busy} onClick={() => {
                   if (window.confirm("Permanently delete this field and its values from all records?")) {
@@ -218,17 +231,17 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
                 }}>Delete</button>
               </div>;
             })()}</td>}
-            {editableObjects.includes(standard) && <td className="p-2">{item.custom && (() => {
+            {editableObjects.includes(standard) && <td className="p-2">{!item.custom ? (Object.prototype.hasOwnProperty.call(editableStandardFields[standard]??{},item.key) ? <button type="button" className="text-indigo-700" onClick={()=>{setFieldDraft(null);setStandardDraft({key:item.key,label:item.label,required:!!item.required})}}>Edit</button> : <span className="text-slate-500">Managed by CRM</span>) : (() => {
               const existing = standardFields.find(field => field.entity === standard && field.key === item.key);
               if (!existing) return null;
               return <div className="flex gap-2">
                 <button type="button" className="text-indigo-700" onClick={() => {
                   setEditingField(true);
                   setFieldDraft({ key: existing.key, label: existing.label, type: existing.type,
-                    required: existing.required, options: (existing.options ?? []).join("\n") });
+                    required: existing.required, options: (existing.options ?? []).join("\n"), target: existing.type === "LOOKUP" ? existing.options?.[0] ?? "" : "" });
                 }}>Edit</button>
                 <button type="button" className="text-red-700" disabled={setupBusy} onClick={() => {
-                  if (window.confirm("Delete this custom field definition?")) void onFieldSave({ action: "deleteField", id: existing.id });
+                  if (window.confirm("Permanently delete this custom field and its values from all records?")) void onFieldSave({ action: "deleteField", id: existing.id });
                 }}>Delete</button>
               </div>;
             })()}</td>}
@@ -246,10 +259,10 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
         <label>Object label <input className={input} required maxLength={100} value={definition.name}
           onChange={event => {
             const name = event.target.value;
-            const key = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^[^a-z]+|_+$/g, "").slice(0,40);
+            const key = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^[^a-z]+|_+$/g, "").slice(0,37) + "__c";
             setDefinition({ ...definition, name, key: keyEdited ? definition.key : key });
           }} /></label>
-        <label>Object key <input className={input} required pattern="[a-z][a-z0-9_]{0,39}" value={definition.key}
+        <label>Object key <input className={input} required pattern="[a-z][a-z0-9_]{0,36}__c" value={definition.key}
           onChange={event => {setKeyEdited(true);setDefinition({ ...definition, key: event.target.value });}} /></label>
         <label>Lookup object <select className={input} value={definition.lookup}
           onChange={event => setDefinition({ ...definition, lookup: event.target.value })}>
@@ -279,6 +292,7 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
           ...(current.definition.lookup ? [{label:"Related record",value:related.records.find(row=>row.id===selectedRecord.record.lookupId)?.record.name ?? selectedRecord.record.lookupId}] : []),
           ...(current.definition.fields ?? []).map(field => ({label:field.label,value:selectedRecord.record.values?.[field.key]})),
         ]}/>
+        <RelatedLists object={object} id={selectedRecord.id} revision={revision}/>
       </section>}
       <form className="space-y-2" onSubmit={event => {
         event.preventDefault();
@@ -291,8 +305,9 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
           <option value="">None</option>
           {related.records.map(row => <option key={row.id} value={row.id}>{row.record.name}</option>)}
         </select></label>}
-        {!!current.definition.fields?.length && <MetadataFields
-          sections={null} fields={current.definition.fields.map(field => ({
+        {current.definition.fields?.filter(field => field.type === "LOOKUP").map(field => <LookupInput key={field.key} field={field} value={String(draft.values[field.key] ?? "")} onChange={value => setDraft(previous => ({ ...previous, values: { ...previous.values, [field.key]: value } }))}/>)}
+        {!!current.definition.fields?.some(field => field.type !== "LOOKUP") && <MetadataFields
+          sections={null} fields={current.definition.fields.filter(field => field.type !== "LOOKUP").map(field => ({
             ...field, type: normalizeFieldType(field.type), required: field.required ?? false,
           }))} values={draft.values}
           onChange={(key,value) => setDraft(previous => ({ ...previous, values: { ...previous.values, [key]: value } }))}/>}
@@ -314,4 +329,22 @@ export default function CustomObjects({ standardFields, editableObjects, fieldTy
       </article>)}</div>
     </>}
   </section>;
+}
+
+function LookupInput({field,value,onChange}:{field:Field;value:string;onChange:(value:string)=>void}) {
+  return <label>{field.label}<CustomLookup target={field.target} value={value} required={!!field.required} onChange={onChange}/></label>;
+}
+
+function RelatedLists({object,id,revision}:{object:string;id:string;revision:number}) {
+  const [lists,setLists] = useState<{object:string;label:string;field:string;records:{id:string;name:string}[];truncated:boolean}[]>([]);
+  const [error,setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setLists([]); setError("");
+    fetch("/api/setup/custom-objects?" + new URLSearchParams({object,parentId:id}), {signal:controller.signal}).then(async response => {
+      const result = await response.json(); if (!response.ok) throw Error(result.error); setLists(result.relatedLists ?? []);
+    }).catch(reason => { if (!controller.signal.aborted) setError(reason.message); });
+    return () => controller.abort();
+  }, [object,id,revision]);
+  return <div className="space-y-2"><h6 className="font-semibold">Related records</h6>{error && <p role="alert">{error}</p>}{lists.map(list => <section key={list.object+":"+list.field} className="rounded border p-3"><h6 className="font-medium">{list.label} ? {list.field} ({list.records.length}{list.truncated ? "+" : ""})</h6>{list.records.length ? <ul>{list.records.map(record => <li key={record.id}>{record.name}</li>)}</ul> : <p className="text-sm text-slate-500">No related records</p>}{list.truncated && <p className="text-sm">Showing the first 200 records.</p>}</section>)}{!lists.length && !error && <p className="text-sm text-slate-500">No incoming lookup relationships.</p>}</div>;
 }

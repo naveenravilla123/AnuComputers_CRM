@@ -3,9 +3,7 @@ import { standardCatalog } from "./setup-metadata";
 
 export function validationFieldKeys(entity: string, customKeys: string[]) {
   const standard = standardCatalog[entity]?.map(field => field.key) ?? [];
-  return entity === "Customer"
-    ? [...standard.filter(key => key !== "createdAt"), ...customKeys]
-    : standard;
+  return [...standard.filter(key => key !== "createdAt"), ...customKeys];
 }
 
 export function parseValidationRules(entity: string, input: unknown, customKeys: string[]): Rule[] {

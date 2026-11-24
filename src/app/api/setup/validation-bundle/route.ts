@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validSession } from "@/lib/session";
 import { validationEntities } from "@/lib/metadata-runtime";
-import { parseValidationRules } from "@/lib/validation-configuration";
+import { importValidationRules } from "@/lib/import-validation-bundle";
 
 export const dynamic = "force-dynamic";
 const prefix = "setup.validation.";
@@ -41,25 +41,7 @@ export async function POST(request: NextRequest) {
 
     const entries = Object.entries(bundle.objects);
     await prisma.$transaction(async tx => {
-      const fields = await tx.customField.findMany({ where: { entity: "Customer" } });
-      const rules = entries.map(([entity, value]) => ({
-        entity,
-        value: parseValidationRules(entity, value, fields.map(field => field.key)),
-      }));
-      for (const entry of rules) {
-        const key = prefix + entry.entity;
-        await tx.businessSetting.upsert({
-          where: { key }, create: { key, value: entry.value }, update: { value: entry.value },
-        });
-      }
-      await tx.auditLog.create({
-        data: {
-          action: "SETUP_VALIDATION_IMPORTED",
-          entity: "CRMSetup",
-          entityId: format,
-          after: { objects: rules.map(rule => rule.entity) },
-        },
-      });
+      await importValidationRules(tx, entries);
     }, { isolationLevel: "Serializable" });
     return NextResponse.json({ updated: entries.length });
   } catch (error) {
