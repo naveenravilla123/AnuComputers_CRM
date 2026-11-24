@@ -5,7 +5,7 @@ import {useEffect,useState} from "react";
 import {SalesTable,SalesFilters,SalesStatus,statusLabel} from "./sales-table";
 import {useStaffAccess} from "./staff-access-context";
 type Item={productId:string;qty:number;unitPrice:string};
-type Data={customers:{id:string;name:string;phone:string}[];products:{id:string;name:string;sku:string;price:string;stocks:{branchId:string;qty:number;reserved:number}[]}[];branches:{id:string;name:string}[];orders:{id:string;number:string;status:string;total:string;customer:{name:string};items:{id:string;qty:number;unitPrice:string;product:{name:string}}[]}[];branchByOrder:Record<string,string>};
+type Data={customers:{id:string;name:string;phone:string}[];products:{id:string;name:string;sku:string;price:string;stocks:{branchId:string;qty:number;reserved:number}[]}[];branches:{id:string;name:string}[];orders:{id:string;number:string;status:string;total:string;customer:{name:string};items:{id:string;qty:number;unitPrice:string;product:{name:string}}[]}[];branchByOrder:Record<string,string>;reservationAvailability?:Record<string,Record<string,boolean>>};
 const blank=()=>({productId:"",qty:1,unitPrice:"0"});
 const field="w-full rounded-xl border bg-white p-3 text-sm";
 const btn="rounded-xl bg-[#6256dc] px-4 py-3 text-sm font-bold text-white disabled:opacity-50";
@@ -107,7 +107,9 @@ export default function LiveOrders(){
      <td><details><summary className="cursor-pointer">{o.items.length} lines</summary>{o.items.map(i=><p key={i.id} className="text-xs">{i.product?.name} × {i.qty} @ ₹{i.unitPrice}</p>)}</details></td>
      <td className="tabular-nums">{o.total==null?"—":Number(o.total).toLocaleString("en-IN")}</td>
      <td><div className="space-y-2">{o.status&&<SalesStatus value={o.status}/>}<div className="flex flex-wrap gap-3">
-      {o.status==="DRAFT"&&canConfirm&&<button disabled={busy||!branchId} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50" onClick={()=>{if(confirm("Confirm order and reserve branch stock?"))submit({action:"confirm",id:o.id,branchId})}}>Confirm & reserve</button>}
+      {o.status==="DRAFT"&&canConfirm&&<button disabled={busy||!branchId||data.reservationAvailability?.[o.id]?.[branchId]===false} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50" onClick={()=>{if(confirm("Confirm order and reserve branch stock?"))submit({action:"confirm",id:o.id,branchId})}}>Confirm & reserve</button>}
+      {o.status==="DRAFT"&&canConfirm&&data.reservationAvailability?.[o.id]?.[branchId]===false&&
+       <p className="text-xs text-amber-800">Insufficient stock at the selected branch.</p>}
       {o.status==="CONFIRMED"&&canDeliver&&<button disabled={busy} className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50" onClick={()=>{if(confirm("Deliver order and deduct reserved stock?"))submit({action:"deliver",id:o.id})}}>Mark delivered</button>}
       {["DRAFT","CONFIRMED"].includes(o.status)&&canReserve&&<button disabled={busy} className="text-red-600" onClick={()=>{if(confirm("Cancel order and release any reservation?"))submit({action:"cancel",id:o.id})}}>Cancel</button>}
      </div></div></td>

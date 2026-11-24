@@ -40,7 +40,7 @@ export async function enableRecordAudit(db: Prisma.TransactionClient) {
     DECLARE
       metadata_key text;
       stamp text := to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
-      actor text := current_user;
+      actor text := nullif(current_setting('anu.record_actor', true), '');
     BEGIN
       IF TG_OP = 'DELETE' THEN
         DELETE FROM public."BusinessSetting"

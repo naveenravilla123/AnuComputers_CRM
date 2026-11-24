@@ -92,3 +92,21 @@ test("effective permissions use the assigned profile and only assigned permissio
     assert.deepEqual(defaults.fieldPermissions, ["Invoice:total:READ", "SalesOrder:status:READ"], role);
   }
 });
+
+test("sales writes pass the authenticated actor into an isolated database transaction", () => {
+  const audit = read("src/lib/sales-audit.ts");
+  assert.match(audit, /"staff:" \+ access.user.id/);
+  assert.match(audit, /set_config\('anu.record_actor', \$\{actor\}, true\)/);
+  assert.match(read("src/lib/standard-records.ts"), /current_setting\('anu.record_actor', true\)/);
+  for (const entity of ["customers", "leads", "products", "quotes", "orders"]) {
+    assert.match(read(`src/app/api/${entity}/route.ts`), /auditedSalesWrite\(/, entity);
+  }
+});
+
+test("branch availability preview checks staff field grants and preserves the reservation check", () => {
+  const route = read("src/app/api/orders/route.ts");
+  assert.match(route, /canReadStaffFields\(staff,[\s\S]*?\["Stock", "qty"\], \["Stock", "reserved"\]/);
+  assert.match(route, /for\(const \[productId,qty\] of itemQuantities\(order.items\)\)/);
+  assert.match(route, /stock.qty-stock.reserved<qty/);
+  assert.match(read("src/components/live-orders.tsx"), /Insufficient stock at the selected branch/);
+});

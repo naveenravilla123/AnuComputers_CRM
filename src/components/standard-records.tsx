@@ -80,7 +80,7 @@ export default function StandardRecords({ entity, customFields }: {
     {scriptError && <p role="alert">{scriptError}</p>}
     {!data && !error && <p role="status">Loading records…</p>}
     {data && !data.tracking && <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">
-      <p>Enable tracking to capture audit details for future record changes across standard objects.</p>
+      <p>Enable or upgrade audit tracking for future standard-record changes. Existing audit history is preserved.</p>
       <button type="button" className="mt-2 rounded border bg-white px-3 py-2" disabled={enabling}
         onClick={enableAudit}>{enabling ? "Enabling…" : "Enable audit tracking"}</button>
     </div>}
