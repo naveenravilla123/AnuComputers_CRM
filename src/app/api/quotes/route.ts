@@ -1,13 +1,13 @@
 import {NextRequest,NextResponse} from "next/server";
 import {Prisma} from "@prisma/client";
 import {prisma} from "@/lib/prisma";
-import {authorizeAll} from "@/lib/request-access";
+import {authorizeAll,authorizeRequest} from "@/lib/request-access";
 import {assertStaffFieldEdits,canReadStaffFields,filterStaffResponse,filterStaffRecord} from "@/lib/staff-field-access";
 import {saveNewCustomValues} from "@/lib/new-custom-values";
 import {validateRecord} from "@/lib/record-validation";
 export const dynamic="force-dynamic";
 const fail=(error:string,status=400)=>NextResponse.json({error},{status});
-export async function GET(r:NextRequest){const auth=await authorizeAll(r,[{object:"Quote",action:"READ"},{object:"Lead",action:"READ"},{object:"Product",action:"READ"},{object:"Customer",action:"READ"}]);if(!auth.allowed)return fail(auth.status===401?"Unauthorized":"Forbidden",auth.status);try{const [leads,products,quotes]=await Promise.all([prisma.lead.findMany({include:{customer:true}}),prisma.product.findMany({where:{active:true},select:{id:true,name:true,sku:true,price:true}}),prisma.quote.findMany({include:{lead:{include:{customer:true}},items:{include:{product:true}}},orderBy:{number:"desc"}})]);const result={leads,products,quotes};return NextResponse.json(auth.access.kind==="staff"?filterStaffResponse(auth.access.user,result,{leads:"Lead",products:"Product",quotes:"Quote"}):result,{headers:{"Cache-Control":"no-store"}})}catch{return fail("Database unavailable",503)}}
+export async function GET(r:NextRequest){const auth=await authorizeRequest(r,"Quote","READ");if(!auth.allowed)return fail(auth.status===401?"Unauthorized":"Forbidden",auth.status);try{const [leads,products,quotes]=await Promise.all([prisma.lead.findMany({include:{customer:true}}),prisma.product.findMany({where:{active:true},select:{id:true,name:true,sku:true,price:true}}),prisma.quote.findMany({include:{lead:{include:{customer:true}},items:{include:{product:true}}},orderBy:{number:"desc"}})]);const result={leads,products,quotes};return NextResponse.json(auth.access.kind==="staff"?filterStaffResponse(auth.access.user,result,{leads:"Lead",products:"Product",quotes:"Quote"}):result,{headers:{"Cache-Control":"no-store"}})}catch{return fail("Database unavailable",503)}}
 export async function POST(r:NextRequest){
  if(r.headers.get("origin")!==r.nextUrl.origin)return fail("Invalid origin",403);
  try{

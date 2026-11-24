@@ -1,6 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {runInThisContext} from "node:vm";
+import ts from "typescript";
 const read=p=>readFileSync(new URL("../../"+p,import.meta.url),"utf8");
 test("repair APIs scope case lists and writes to shared jobs",()=>{
  const s=read("src/app/api/repairs/route.ts");
@@ -24,4 +26,69 @@ test("admin-only setup and staff deactivation enforced",()=>{
 });
 test("raw after-sales records not exposed to staff",()=>{
  assert.match(read("src/app/api/after-sales/route.ts"),/Staff after-sales history requires a record-scoped implementation/);
+});
+
+test("sales list access uses its own object grant and filters related data", () => {
+  const workspace = read("src/app/staff/page.tsx");
+  for (const [module, object] of [
+    ["Customers", "Customer"],
+    ["Enquiries", "Lead"],
+    ["Quotations", "Quote"],
+    ["Sales Orders", "SalesOrder"],
+  ]) {
+    const entry = workspace.split("\n").find(line => line.includes(`id:"${module}"`));
+    assert.ok(entry, `Missing module ${module}`);
+    assert.ok(entry.includes(`grants:["${object}:READ"]}`), module);
+  }
+
+  for (const [endpoint, object] of [["quotes", "Quote"], ["orders", "SalesOrder"]]) {
+    const route = read(`src/app/api/${endpoint}/route.ts`);
+    const get = route.split("export async function POST")[0];
+    assert.ok(get.includes(`authorizeRequest(r,"${object}","READ")`));
+    assert.match(get, /filterStaffResponse\(auth\.access\.user/);
+  }
+  assert.match(read("src/app/api/orders/route.ts"), /branchByOrder:auth.access.kind==="admin" \|\| auth.access.user.permissions.includes\("Branch:READ"\)/);
+});
+
+test("effective permissions use the assigned profile and only assigned permission sets for each staff role", async () => {
+  const roles = ["SALES", "TECHNICIAN", "INVENTORY", "FINANCE"];
+  for (const role of roles) {
+    const settings = new Map(Object.entries({
+      [`setup.profile.${role}`]: ["Invoice:READ"],
+      [`setup.fieldSecurity.profile.${role}`]: ["Invoice:total:READ"],
+      "setup.staffProfile.staff": "custom-profile",
+      "setup.customProfile.custom-profile": {role, permissions: ["Customer:READ"]},
+      "setup.fieldSecurity.custom.custom-profile": ["Customer:name:READ"],
+      "setup.permissionSet.sales-support": {staffIds: ["staff"], permissions: ["SalesOrder:READ"]},
+      "setup.fieldSecurity.set.sales-support": ["SalesOrder:status:READ"],
+      "setup.permissionSet.unassigned": {staffIds: ["another-user"], permissions: ["Product:DELETE"]},
+      "setup.fieldSecurity.set.unassigned": ["Product:cost:READ"],
+    }));
+    const prisma = {
+      staff: {findUnique: async () => ({id: "staff", role, active: true})},
+      businessSetting: {
+        findUnique: async ({where}) => settings.has(where.key) ? {value: settings.get(where.key)} : null,
+        findMany: async ({where}) => [...settings].filter(([key]) => key.startsWith(where.key.startsWith))
+          .map(([key, value]) => ({key, value})),
+      },
+    };
+    const exports = {};
+    const source = ts.transpileModule(read("src/lib/permissions.ts"), {
+      compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
+    }).outputText;
+    const initialize = runInThisContext(`(function(exports, require) {${source}\n})`);
+    initialize(exports, name => {
+      assert.equal(name, "@/lib/prisma");
+      return {prisma};
+    });
+
+    const custom = await exports.resolveStaffPermissions("staff");
+    assert.deepEqual(custom.permissions, ["Customer:READ", "SalesOrder:READ"], role);
+    assert.deepEqual(custom.fieldPermissions, ["Customer:name:READ", "SalesOrder:status:READ"], role);
+
+    settings.delete("setup.staffProfile.staff");
+    const defaults = await exports.resolveStaffPermissions("staff");
+    assert.deepEqual(defaults.permissions, ["Invoice:READ", "SalesOrder:READ"], role);
+    assert.deepEqual(defaults.fieldPermissions, ["Invoice:total:READ", "SalesOrder:status:READ"], role);
+  }
 });

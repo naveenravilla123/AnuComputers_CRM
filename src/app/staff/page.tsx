@@ -47,13 +47,13 @@ const fields=(entity:string,...keys:string[])=>keys.map(key=>entity+":"+key+":RE
 
 const modules:Module[]=[
   {id:"My Jobs",group:"My Work",icon:ClipboardList,grants:["JobCard:READ"],technicianOnly:true},
-  {id:"Customers",group:"Sales",icon:Users,grants:["Customer:READ"],fields:fields("Customer","name")},
-  {id:"Enquiries",group:"Sales",icon:UserRoundPlus,grants:["Lead:READ"],fields:fields("Lead","name")},
+  {id:"Customers",group:"Sales",icon:Users,grants:["Customer:READ"]},
+  {id:"Enquiries",group:"Sales",icon:UserRoundPlus,grants:["Lead:READ"]},
   {id:"Products",group:"Inventory",icon:Package,grants:["Product:READ"]},
   {id:"Inventory",group:"Inventory",icon:Boxes,grants:["Stock:READ","Product:READ","Branch:READ"],fields:[...fields("Product","name","sku"),...fields("Branch","name"),...fields("Stock","qty","reserved","reorderPoint")]},
   {id:"Suppliers",group:"Purchasing",icon:Truck,grants:["PurchaseOrder:READ","Supplier:READ","Product:READ","Branch:READ","Stock:READ"],fields:[...fields("Supplier","name","phone","email","gstin"),...fields("Product","name","sku","cost"),...fields("Branch","name"),...fields("PurchaseOrder","number","supplierId","status","total")]},
-  {id:"Quotations",group:"Sales",icon:FileText,grants:["Quote:READ","Lead:READ","Product:READ","Customer:READ"]},
-  {id:"Sales Orders",group:"Sales",icon:ShoppingCart,grants:["SalesOrder:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"]},
+  {id:"Quotations",group:"Sales",icon:FileText,grants:["Quote:READ"]},
+  {id:"Sales Orders",group:"Sales",icon:ShoppingCart,grants:["SalesOrder:READ"]},
   {id:"Invoices",group:"Finance",icon:ReceiptText,grants:["Invoice:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","SalesOrder:READ","Payment:READ"],fields:[...fields("Customer","name","phone"),...fields("Product","name","sku","price"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("SalesOrder","number","total"),...fields("Invoice","number","status","subtotal","tax","discount","total"),...fields("Payment","amount","method","reference","paidAt")]},
   {id:"Payments",group:"Finance",icon:Wallet,grants:["Invoice:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","SalesOrder:READ","Payment:READ"],fields:[...fields("Customer","name","phone"),...fields("Product","name","sku","price"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("SalesOrder","number","total"),...fields("Invoice","number","status","subtotal","tax","discount","total"),...fields("Payment","amount","method","reference","paidAt")]},
   {id:"Service Cases",group:"Service",icon:Headphones,grants:["ServiceCase:READ","Customer:READ","Asset:READ","JobCard:READ","Staff:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"],fields:[...fields("Customer","name","phone"),...fields("ServiceCase","issue","status","priority","estimate"),...fields("Asset","brand","model","serialNumber","condition","receivedAccessories"),...fields("JobCard","diagnosis","notes","laborCost","status","technicianId"),...fields("Staff","name"),...fields("Product","name","sku","price","cost"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("Invoice","number")]},
@@ -108,6 +108,7 @@ export default function StaffPortal(){
   }
 
   function renderModule(){
+    if (!available.some(module => module.id === active)) return null;
     const staffAccess={permissions:user?.permissions??[],fieldPermissions:user?.fieldPermissions??[]};
     switch(active){
       case "My Jobs":return <MyJobs jobs={jobs}/>;
@@ -165,7 +166,7 @@ export default function StaffPortal(){
       </header>
       <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-7">
         {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-        {!available.length?<section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-lg font-semibold">No modules assigned yet</h2><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">Your account is active, but its role profile, custom profile, or permission sets do not currently grant access to an operational module. Contact your CRM administrator to configure access in Setup.</p><p className="mt-4 text-xs text-slate-400">Administrator-only Setup and staff account tools are not available in the staff workspace.</p></section>:<>{active&&<StaffAccessProvider access={user}>{renderModule()}</StaffAccessProvider>}</>}
+        {!available.length?<section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-lg font-semibold">No modules assigned yet</h2><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">Your account is active, but its role profile, custom profile, or permission sets do not currently grant access to an operational module. Contact your CRM administrator to configure access in Setup.</p><p className="mt-4 text-xs text-slate-400">Administrator-only Setup and staff account tools are not available in the staff workspace.</p></section>:<>{active&&<StaffAccessProvider key={JSON.stringify([user.id, user.permissions, user.fieldPermissions])} access={user}>{renderModule()}</StaffAccessProvider>}</>}
       </div>
     </section>
   </main>;
