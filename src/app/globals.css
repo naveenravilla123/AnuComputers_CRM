@@ -65,3 +65,10 @@
   font-size: 1.25rem;
   line-height: 1.5;
 }
+
+/* Keep disabled dialog actions readable on the light footer. */
+.crm-record-form > footer button:is([type="submit"], :not([type])):disabled {
+  opacity: 1;
+  background-color: #e2e8f0;
+  color: #475569;
+}
