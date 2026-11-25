@@ -20,5 +20,5 @@ export function NewRecordFields({state,standardValues,onStandardChange,renderSta
  return <>{state.error&&<p role="alert">{state.error}</p>}{fields&&fields.length>0&&<MetadataFields fields={fields} sections={state.sections} values={{...standardValues,...state.values}} onChange={(key,value)=>{if(state.fields?.some(field=>field.key===key))state.setValues(previous=>({...previous,[key]:value}));else onStandardChange?.(key,value)}} renderCustomField={field=>standard.some(standardField=>standardField.key===field.key)?renderStandardField?.(field)??null:null}/>}</>;
 }
 export function NewAssetFields({state}:{state:ReturnType<typeof useNewAssetFields>}){
- return <><NewRecordFields state={state}/>{state.repair&&<div className="space-y-4 rounded-lg border-t pt-4"><h3 className="font-semibold">Service case fields</h3><NewRecordFields state={state.repair.serviceCase}/><h3 className="font-semibold">Job card fields</h3><NewRecordFields state={state.repair.jobCard}/></div>}</>;
+ return <><NewRecordFields state={state}/>{state.repair&&<div className="space-y-4 rounded-lg border-t pt-4"><h3 className="font-semibold">Service case fields</h3><NewRecordFields state={state.repair.serviceCase}/><h3 className="font-semibold">Repair task fields</h3><NewRecordFields state={state.repair.jobCard}/></div>}</>;
 }

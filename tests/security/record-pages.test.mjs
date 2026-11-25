@@ -189,6 +189,8 @@ test("consolidated navigation preserves payment records and the enquiry sales re
   const shortcuts = defaultNavigation.map(item => item.id);
   assert.ok(shortcuts.includes("Invoices") && shortcuts.includes("Enquiries"));
   assert.ok(!shortcuts.includes("Payments") && !shortcuts.includes("Opportunities"));
+  assert.ok(shortcuts.includes("Service Cases") && !shortcuts.includes("Job Cards"));
+  assert.equal(catalog.recordRelationships("ServiceCase").find(item => item.key === "jobs")?.target, "JobCard");
   const invoice = catalog.recordRelationships("Invoice");
   assert.equal(invoice.find(item => item.key === "payments")?.target, "Payment");
   const enquiry = catalog.recordRelationships("Lead");

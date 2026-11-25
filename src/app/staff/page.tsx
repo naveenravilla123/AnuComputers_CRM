@@ -61,7 +61,6 @@ const modules:Module[]=[
   {id:"Sales Orders",group:"Sales",icon:ShoppingCart,grants:["SalesOrder:READ"]},
   {id:"Invoices",group:"Finance",icon:ReceiptText,grants:["Invoice:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","SalesOrder:READ","Payment:READ"],fields:[...fields("Customer","name","phone"),...fields("Product","name","sku","price"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("SalesOrder","number","total"),...fields("Invoice","number","status","subtotal","tax","discount","total"),...fields("Payment","amount","method","reference","paidAt")]},
   {id:"Service Cases",group:"Service",icon:Headphones,grants:["ServiceCase:READ","Customer:READ","Asset:READ","JobCard:READ","Staff:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"],fields:[...fields("Customer","name","phone"),...fields("ServiceCase","issue","status","priority","estimate"),...fields("Asset","brand","model","serialNumber","condition","receivedAccessories"),...fields("JobCard","diagnosis","notes","laborCost","status","technicianId"),...fields("Staff","name"),...fields("Product","name","sku","price","cost"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("Invoice","number")]},
-  {id:"Job Cards",group:"Service",icon:ClipboardList,grants:["ServiceCase:READ","Customer:READ","Asset:READ","JobCard:READ","Staff:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"],fields:[...fields("Customer","name","phone"),...fields("ServiceCase","issue","status","priority","estimate"),...fields("Asset","brand","model","serialNumber","condition","receivedAccessories"),...fields("JobCard","diagnosis","notes","laborCost","status","technicianId"),...fields("Staff","name"),...fields("Product","name","sku","price","cost"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("Invoice","number")]},
   {id:"Warranties",group:"Service",icon:ShieldCheck,grants:["Asset:READ","Warranty:READ","Staff:READ","JobCard:READ","ServiceCase:READ","Customer:READ","Product:READ"],fields:[...fields("Staff","name","email","role","active"),...fields("JobCard","status"),...fields("ServiceCase","issue"),...fields("Customer","name"),...fields("Asset","brand","model","serialNumber","customerId"),...fields("Warranty","type","startDate","endDate","terms"),...fields("Product","name","brand")]},
   {id:"After Sales",group:"Service",icon:Wrench,grants:["Warranty:READ","Invoice:READ","SalesOrder:READ","Product:READ","Branch:READ","Asset:READ","Customer:READ","Payment:READ"],fields:[...fields("Warranty","type","startDate","endDate","terms"),...fields("Asset","brand","model","serialNumber"),...fields("Customer","name"),...fields("Invoice","number","status","tax","discount","total"),...fields("SalesOrder","status"),...fields("Product","name"),...fields("Payment","amount","method","reference","paidAt"),...fields("Branch","name")]},
   {id:"Communications",group:"Sales",icon:MessageSquare,grants:["Communication:READ","Customer:READ"],fields:[...fields("Communication","channel","recipient","template","status","externalId","createdAt"),...fields("Customer","phone")]},
@@ -78,7 +77,7 @@ export default function StaffPortal(){
   const [email,setEmail]=useState(""),[password,setPassword]=useState("");
   const [error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
   const moduleParam=useCrmUrl().get("module");
-  const requestedModule=moduleParam==="Opportunities"?"Enquiries":moduleParam==="Payments"?"Invoices":moduleParam;
+  const requestedModule=moduleParam==="Opportunities"?"Enquiries":moduleParam==="Payments"?"Invoices":moduleParam==="Job Cards"?"Service Cases":moduleParam;
   const available=useMemo(()=>user?[homeModule,...modules].filter(module=>
     (!module.technicianOnly||user.role==="TECHNICIAN")&&module.grants.every(grant=>user.permissions.includes(grant))&&
     (module.fields||[]).every(grant=>user.fieldPermissions.includes(grant))
@@ -148,7 +147,7 @@ export default function StaffPortal(){
       case "Quotations":return <LiveQuotes/>;
       case "Sales Orders":return <LiveOrders/>;
       case "POS Billing":case "Invoices":return <LiveBilling key={active} mode={active}/>;
-      case "Service Cases":case "Job Cards":return <LiveRepairs key={active} mode={active} initialIntake={bookRepair}/>;
+      case "Service Cases":return <LiveRepairs key={active} initialIntake={bookRepair}/>;
       case "Warranties":return <LiveServiceAdmin mode="Warranties"/>;
       case "After Sales":return <LiveAfterSales/>;
       case "Reports":return <LiveReports mode="Reports"/>;

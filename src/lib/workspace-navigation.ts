@@ -7,7 +7,7 @@ export const defaultNavigation: NavigationItem[] = [
   { id: "Dashboard", group: "Home", visible: true, label: "Home" },
   { id: "Customers", group: "Customers", visible: true },
   ...groupItems("Sales", ["POS Billing", "Quotations", "Enquiries", "Sales Orders", "Invoices", "Reports"]),
-  ...groupItems("Repairs", ["Service Cases", "Job Cards", "Warranties", "After Sales", "Technicians", "Communications"]),
+  ...groupItems("Repairs", ["Service Cases", "Warranties", "After Sales", "Technicians", "Communications"]),
   ...groupItems("Stock", ["Inventory", "Products", "Spare Parts", "Suppliers", "Purchases"]),
   ...groupItems("My Work", ["My Jobs"]),
   { id: "Global Search", group: "Home", visible: false },
