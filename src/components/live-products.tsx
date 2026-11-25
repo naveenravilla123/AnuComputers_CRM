@@ -1,4 +1,5 @@
 "use client";
+import RecordDialog from "./record-dialog";
 import {useEffect,useState} from "react";
 import MetadataFields,{type Field,type Values} from "./metadata-fields";
 import {Plus,Pencil,Trash2,Package,X} from "lucide-react";
@@ -118,7 +119,7 @@ export default function LiveProducts({open,onClose}:{open:boolean;onClose:()=>vo
    </tr>)}</tbody>
   </table></div>
   {!filtered.length&&<p className="rounded-xl bg-white p-10 text-center text-slate-500">{busy?"Loading products…":"No products found. Add your first product."}</p>}
-  {editing&&<div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/60 p-4"><form onSubmit={e=>{e.preventDefault();save()}} className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-6">
+  {editing&&<RecordDialog label={form.id?"Edit product":"New product"} width="max-w-2xl" onSubmit={e=>{e.preventDefault();save()}} actions={<button disabled={busy||!metadata} className="disabled:opacity-50 rounded-xl bg-[#6256dc] p-3 font-bold text-white">{busy?"Saving…":"Save product"}</button>}>
    <div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">{form.id?"Edit":"New"} product</h2><button type="button" aria-label="Close product form" onClick={()=>setEditing(false)}><X/></button></div>
    {metadata&&<MetadataFields fields={productFormFields} sections={metadata.sections} values={{...form,...custom}} onChange={(key,value)=>{
     if(metadata.fields.some(field=>field.key===key)){setCustom(previous=>({...previous,[key]:value}));return}
@@ -127,7 +128,6 @@ export default function LiveProducts({open,onClose}:{open:boolean;onClose:()=>vo
     }} renderCustomField={field=>field.key==="specifications"?<div className="space-y-3"><p className="font-medium">Product specifications</p><label className="block text-sm font-medium">HTTPS image URL<input disabled={metadata.standardEditable?.specifications===false} className="mt-1 w-full rounded-lg border p-3" type="url" value={form.image} onChange={e=>setForm({...form,image:e.target.value})}/></label><label className="block text-sm font-medium">Description<textarea disabled={metadata.standardEditable?.specifications===false} className="mt-1 w-full rounded-lg border p-3" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label></div>:null}/>}
    {metaError&&<p role="alert" className="mt-3 text-red-600">{metaError}</p>}
    {error&&<p role="alert" className="mt-3 text-red-600">{error}</p>}
-   <button disabled={busy||!metadata} className="mt-5 w-full rounded-xl bg-[#6256dc] p-3 font-bold text-white">{busy?"Saving…":"Save product"}</button>
-  </form></div>}
+</RecordDialog>}
  </section>
 }

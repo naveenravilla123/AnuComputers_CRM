@@ -185,7 +185,7 @@ export default function StaffPortal(){
       </nav>
       <div className="hidden border-t border-slate-100 p-4 lg:block"><div className="flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-indigo-100 font-bold text-indigo-700">{user.name.slice(0,1).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{user.name}</p><p className="truncate text-xs text-slate-500">{user.role}</p></div><button title="Sign out" aria-label="Sign out" disabled={busy} onClick={()=>authenticate("logout")} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><LogOut size={17}/></button></div></div>
     </aside>
-    <section className="min-w-0 flex-1">
+    <section className="crm-workspace min-w-0 flex-1">
       <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-7">
         <div><p className="text-xs font-medium text-indigo-600">{user.profileId?"Assigned custom profile":"Role profile"} · {user.role}</p><h1 className="text-lg font-bold">{active==="Dashboard"?"Home":active}</h1></div>
         <div className="flex items-center gap-2"><button onClick={()=>{window.dispatchEvent(new Event(workspaceNavigationChanged));load().catch(()=>setError("Refresh failed"))}} className="rounded-xl border border-slate-200 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Refresh workspace"><RefreshCw size={17}/></button><button onClick={()=>authenticate("logout")} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 lg:hidden"><LogOut size={16}/>Sign out</button></div>

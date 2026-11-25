@@ -1,4 +1,5 @@
 "use client";
+import RecordDialog from "./record-dialog";
 import CustomLookup from "./custom-lookup";
 import {useEffect,useState} from "react";
 import {resolveLayout,layoutColumns} from "@/lib/record-layout";
@@ -47,7 +48,7 @@ export default function CustomValues({entity,id,onClose,onSaved}:{entity:string;
 
  const cls="mt-1 block w-full rounded-lg border p-3";
  const canSave=fields.some(field=>field.editable!==false)||(name!==null&&nameEditable);
- return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4"><form className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-2xl bg-white p-6 space-y-3" onSubmit={e=>{e.preventDefault();save()}}>
+ return <RecordDialog label={entity+" record fields"} width="max-w-4xl" onSubmit={e=>{e.preventDefault();save()}} actions={<button disabled={busy||!ready||!canSave} className="rounded-xl bg-indigo-600 px-4 py-3 text-white disabled:opacity-50">Save record fields</button>}><div className="space-y-3">
   <div className="flex justify-between"><h3 className="text-xl font-bold">{entity} · Custom fields</h3><button type="button" onClick={onClose}>Close</button></div>
   {error&&<p role="alert" className="text-red-700">{error}</p>}
   {busy&&!ready&&<p>Loading fields…</p>}
@@ -63,6 +64,5 @@ export default function CustomValues({entity,id,onClose,onSaved}:{entity:string;
    <p>{new Date(entry.at).toLocaleString()} {entry.actorId&&" · "+entry.actorId}</p>
    {entry.after?.values?Object.entries(entry.after.values).map(([key,value])=><p key={key}>{fields.find(field=>field.key===key)?.label??key}: {String(entry.before?.[key]??"—")} → {String(value??"—")}</p>):<p>{entry.after?.fields?.join(", ")}</p>}
   </li>)}</ul></details>}
-  <button disabled={busy||!ready||!canSave} className="rounded-xl bg-indigo-600 px-4 py-3 text-white disabled:opacity-50">Save record fields</button>
- </form></div>;
+</div></RecordDialog>;
 }

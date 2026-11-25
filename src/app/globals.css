@@ -4,3 +4,64 @@
 
 :focus-visible{outline:2px solid #6256dc;outline-offset:2px}button:disabled{opacity:.5;cursor:not-allowed}
 .crm-setup{font-size:14px;line-height:1.5}.crm-setup label:not(:has(input[type=checkbox])){display:block;font-weight:500}.crm-setup input:not([type=checkbox]),.crm-setup select{min-height:40px;max-width:100%;font-size:14px}.crm-setup input[type=checkbox]{width:18px;height:18px;accent-color:#4f46e5;vertical-align:middle;flex-shrink:0}.crm-setup button{min-height:36px}.crm-setup .setup-primary,.crm-setup button.bg-indigo-600{background:#4f46e5;color:white;border-radius:8px;padding:10px 16px;font-weight:600}.crm-setup .setup-primary:hover,.crm-setup button.bg-indigo-600:hover{background:#4338ca}.crm-setup button:disabled{opacity:.5}.crm-setup td,.crm-setup th{overflow-wrap:anywhere}
+
+/* CRM data entry includes inline workflows, configured fields, and record dialogs. */
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) {
+  --crm-field-border: #cbd5e1;
+  --crm-field-focus: #4f46e5;
+  min-width: 0;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) :is(label, fieldset) {
+  min-width: 0;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) label {
+  color: #334155;
+  font-size: .875rem;
+  font-weight: 600;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields)
+:is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--crm-field-border);
+  border-radius: .625rem;
+  background-color: white;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.375;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) label >
+:is(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"]), select, textarea) {
+  margin-top: .375rem;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields)
+:is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--crm-field-focus);
+  outline-offset: 1px;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields)
+:is(input:not([type="checkbox"], [type="radio"]), select, textarea):is(:disabled, [readonly]) {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+:is(.crm-workspace form, .crm-record-form, .crm-metadata-fields) input:is([type="checkbox"], [type="radio"]) {
+  accent-color: var(--crm-field-focus);
+}
+.crm-metadata-fields fieldset {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+.crm-record-form > footer button {
+  min-height: 2.75rem;
+}
+.crm-dialog-content > :is(h2, h3) {
+  font-size: 1.25rem;
+  line-height: 1.5;
+}

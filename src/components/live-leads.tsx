@@ -1,5 +1,6 @@
 "use client";
 
+import RecordDialog from "./record-dialog";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import MetadataFields, { type Field, type Values } from "./metadata-fields";
@@ -174,21 +175,17 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
 
   return <>
     {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-emerald-800">{notice}</p>}
-    {conversion && <div className="fixed inset-0 z-[65] grid place-items-center bg-slate-900/60 p-4">
-      <form role="dialog" aria-modal="true" aria-labelledby="convert-enquiry-title"
-        className="w-full max-w-md space-y-4 rounded-xl bg-white p-5 shadow-xl"
-        onSubmit={event => { event.preventDefault(); if (canConvert) void save({ action: "convert", id: conversion.id }); }}>
-        <h2 id="convert-enquiry-title" className="text-lg font-semibold">Convert to Customer</h2>
-        <p className="text-sm text-slate-600">An existing customer with the same phone number will be linked. If there is no match, a customer will be created from the enquiry.</p>
-        <p className="text-sm font-medium">{[conversion.name, conversion.phone].filter(Boolean).join(" · ")}</p>
-        {error && <p role="alert" className="text-red-700">{error}</p>}
-        <div className="flex justify-end gap-3">
+    {conversion && <RecordDialog label="Convert to Customer" width="max-w-md"
+      onSubmit={event => { event.preventDefault(); if (canConvert) void save({ action: "convert", id: conversion.id }); }} actions={<>
           <button type="button" disabled={busy} onClick={() => { setConversion(null); setError(""); }}>Cancel</button>
           <button className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
             disabled={busy || !canConvert}>{busy ? "Converting…" : "Convert"}</button>
-        </div>
-      </form>
-    </div>}
+      </>}>
+        <h2 className="text-lg font-semibold">Convert to Customer</h2>
+        <p className="text-sm text-slate-600">An existing customer with the same phone number will be linked. If there is no match, a customer will be created from the enquiry.</p>
+        <p className="text-sm font-medium">{[conversion.name, conversion.phone].filter(Boolean).join(" · ")}</p>
+        {error && <p role="alert" className="text-red-700">{error}</p>}
+    </RecordDialog>}
     {recordId && <RecordPage key={recordId} record={{ entity: "Lead", id: recordId }} onClose={closeCrmRecord}
       customEdit={false} revision={revision} onEdit={current && canEditLead ? () => openForm(current) : undefined}
       actions={current ? actions(current, true) : undefined}/>}
@@ -222,10 +219,14 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
       </tr>)}
     </SalesTable>}
     </section>
-    {form && <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/60 p-4">
-      <form role="dialog" aria-modal="true" aria-label={form.id ? "Edit enquiry" : "New enquiry"}
-        className="max-h-[90vh] w-full max-w-3xl space-y-4 overflow-auto rounded-2xl bg-white p-6"
-        onSubmit={event => { event.preventDefault(); void saveForm(); }}>
+    {form && <RecordDialog label={form.id ? "Edit enquiry" : "New enquiry"}
+      onSubmit={event => { event.preventDefault(); void saveForm(); }} actions={<>
+          <button type="button" disabled={busy} className="rounded-lg border px-4 py-2"
+            onClick={() => { setForm(null); setError(""); }}>Cancel</button>
+          <button disabled={busy || !metadata} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">
+            {busy ? "Saving…" : "Save enquiry"}
+          </button>
+      </>}>
         <h2 className="text-lg font-semibold">{form.id ? "Edit enquiry" : "New enquiry"}</h2>
         {!metadata && !metaError && <p role="status">Loading enquiry layout…</p>}
         {metaError && <p role="alert" className="text-red-700">{metaError}</p>}
@@ -235,14 +236,6 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
             else setForm(previous => previous && ({ ...previous, [key]: String(value) }));
           }}/>}
         {error && <p role="alert" className="text-red-700">{error}</p>}
-        <div className="flex justify-end gap-3 border-t pt-4">
-          <button type="button" disabled={busy} className="rounded-lg border px-4 py-2"
-            onClick={() => { setForm(null); setError(""); }}>Cancel</button>
-          <button disabled={busy || !metadata} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">
-            {busy ? "Saving…" : "Save enquiry"}
-          </button>
-        </div>
-      </form>
-    </div>}
+    </RecordDialog>}
   </>;
 }
