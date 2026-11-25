@@ -29,6 +29,8 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
+  const [conversion, setConversion] = useState<Lead | null>(null);
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [metadata, setMetadata] = useState<{ fields: Field[]; sections: unknown; standardOverrides?: Record<string, {
@@ -46,6 +48,7 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
     hasStaffPermission(staffAccess, "Customer", "CREATE") &&
     ["name", "phone", "source"].every(key => canEditStaffField(staffAccess, "Customer", key)) &&
     canReadStaffField(staffAccess, "Customer", "phone"));
+  const canOpenCustomer = !staffAccess || hasStaffPermission(staffAccess, "Customer", "READ");
   const formId = form?.id;
   const route = useCrmUrl();
   const recordId = route.get("object") === "Lead" ? route.get("record") : null;
@@ -101,12 +104,18 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
     if (busy) return;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const response = await fetch("/api/leads", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       const result = await response.json();
       if (!response.ok) throw Error(result.error);
+      if (body.action === "convert") {
+        setRows(previous => previous.map(row => row.id === result.id ? { ...row, ...result } : row));
+        setConversion(null);
+        setNotice("Customer linked to this enquiry.");
+      }
       if (form && !form.id && result.id) openCrmRecord({ entity: "Lead", id: result.id });
       setForm(null);
       setRevision(value => value + 1);
@@ -148,20 +157,42 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
     return <div className="flex flex-wrap gap-3 text-sm">
       {!onRecord && canEditLead && <button type="button" className="text-indigo-700" onClick={() => openForm(row)}>Edit</button>}
       {canRead("customerId") && row.customerId
-        ? <span className="text-emerald-700">Customer linked</span>
-        : canConvert && <button type="button" className="text-indigo-700 disabled:text-slate-400"
-          disabled={busy || !row.phone || !["QUALIFIED", "NEGOTIATION", "WON"].includes(row.stage)}
-          onClick={() => { if (confirm("Link an existing matching customer or create a new customer?")) save({ action: "convert", id: row.id }); }}>
-          Convert to customer
-        </button>}
+        ? canOpenCustomer
+          ? <button type="button" className="font-medium text-indigo-700 hover:underline"
+            onClick={() => openCrmRecord({ entity: "Customer", id: row.customerId! })}>Open linked customer</button>
+          : <span className="text-emerald-700">Customer linked</span>
+        : canConvert && ["QUALIFIED", "NEGOTIATION", "WON"].includes(row.stage) && <>
+          <button type="button" className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white disabled:opacity-50"
+            disabled={busy || !row.phone?.trim()}
+            onClick={() => { setError(""); setNotice(""); setConversion(row); }}>
+            Convert to Customer
+          </button>
+          {!row.phone?.trim() && canRead("phone") && <span className="self-center text-slate-600">Add a phone number to convert.</span>}
+        </>}
     </div>;
   }
 
   return <>
+    {notice && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-emerald-800">{notice}</p>}
+    {conversion && <div className="fixed inset-0 z-[65] grid place-items-center bg-slate-900/60 p-4">
+      <form role="dialog" aria-modal="true" aria-labelledby="convert-enquiry-title"
+        className="w-full max-w-md space-y-4 rounded-xl bg-white p-5 shadow-xl"
+        onSubmit={event => { event.preventDefault(); if (canConvert) void save({ action: "convert", id: conversion.id }); }}>
+        <h2 id="convert-enquiry-title" className="text-lg font-semibold">Convert to Customer</h2>
+        <p className="text-sm text-slate-600">An existing customer with the same phone number will be linked. If there is no match, a customer will be created from the enquiry.</p>
+        <p className="text-sm font-medium">{[conversion.name, conversion.phone].filter(Boolean).join(" · ")}</p>
+        {error && <p role="alert" className="text-red-700">{error}</p>}
+        <div className="flex justify-end gap-3">
+          <button type="button" disabled={busy} onClick={() => { setConversion(null); setError(""); }}>Cancel</button>
+          <button className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+            disabled={busy || !canConvert}>{busy ? "Converting…" : "Convert"}</button>
+        </div>
+      </form>
+    </div>}
     {recordId && <RecordPage key={recordId} record={{ entity: "Lead", id: recordId }} onClose={closeCrmRecord}
       customEdit={false} revision={revision} onEdit={current && canEditLead ? () => openForm(current) : undefined}
       actions={current ? actions(current, true) : undefined}/>}
-    {recordId && !form && error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {recordId && !form && !conversion && error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <section hidden={!!recordId} className="space-y-4 rounded-2xl border bg-white p-4 sm:p-5">
     <div className="flex items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">Enquiries</h2>
@@ -172,7 +203,7 @@ export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }
       {canCreateLead && <button type="button" className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white"
         onClick={() => openForm()}><Plus size={16}/> New enquiry</button>}
     </div>
-    {!form && error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    {!form && !conversion && error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <SalesFilters query={query} onQuery={setQuery} status={filter} onStatus={setFilter} statuses={stages} showStatus={canRead("stage")}/>
     {isBoard && canRead("stage") ? <div className="flex gap-3 overflow-x-auto pb-4">
       {stages.filter(stage => !filter || stage === filter).map(stage => <section key={stage} className="min-w-56 flex-1 space-y-3 rounded-xl bg-slate-50 p-3">
