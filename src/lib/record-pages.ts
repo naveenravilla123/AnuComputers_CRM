@@ -60,7 +60,7 @@ export function defaultRecordTabs(entity: string): RecordTab[] {
 export const recordPageObjects = Object.keys(standardCatalog);
 export type RecordPageData = {
   title: string;
-  sections: { name: string; columns: number; fields: { label: string; value: unknown }[] }[];
+  sections: { name: string; columns: number; fields: { label: string; value: unknown; lookup?: { entity: string; id: string } }[] }[];
   tabs: { label: string; lists: { key: string; label: string; target: string; columns: { key: string; label: string }[];
     rows: { id: string; [key: string]: unknown }[]; hasMore: boolean }[] }[];
 };

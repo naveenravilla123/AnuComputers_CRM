@@ -1,4 +1,5 @@
 "use client";
+import CustomerLookup from "./customer-lookup";
 
 import {useNewAssetFields,NewAssetFields,NewRecordFields,useNewRecordFields} from "./new-asset-fields";
 import {OpenRecordPage} from "./record-page";
@@ -86,7 +87,7 @@ export default function LiveServiceAdmin({mode}:{mode:string}){
     {canCreateAsset&&
     <form className="space-y-3 rounded-2xl border bg-white p-5" onSubmit={event=>{event.preventDefault();save({action:"asset",...asset,assetCustomValues:assetFields.values})}}>
      <h2 className="font-bold">Register customer device</h2>
-     <select required className={field} value={asset.customerId} onChange={event=>setAsset({...asset,customerId:event.target.value})}><option value="">Select customer</option>{data.customers.map(customer=><option key={customer.id} value={customer.id}>{customer.name} · {customer.phone}</option>)}</select>
+     <CustomerLookup required value={asset.customerId} onChange={customerId=>setAsset(previous=>({...previous,customerId}))}/>
      <select className={field} value={asset.productId} onChange={event=>{const product=data.products.find(item=>item.id===event.target.value);setAsset({...asset,productId:event.target.value,brand:product?.brand||asset.brand,model:product?.name||asset.model})}}><option value="">Optional catalog product</option>{data.products.map(product=><option key={product.id} value={product.id}>{product.name}</option>)}</select>
      {(["brand","model","serialNumber"] as const).map(key=><label key={key} className="block capitalize">{key}<input required={key==="brand"} className={field} value={asset[key]} onChange={event=>setAsset({...asset,[key]:event.target.value})}/></label>)}
      <NewAssetFields state={assetFields}/>

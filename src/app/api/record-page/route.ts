@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     if (staff && !await canAccessServiceRecord(prisma, staff, entity, id)) return fail("Record not found", 404);
     const [{ rows }, fields, values, overrides, audit] = await Promise.all([
       standardRecords(prisma, entity, id, "", 0),
-      prisma.customField.findMany({ where: { entity }, select: { key: true, label: true } }),
+      prisma.customField.findMany({ where: { entity }, select: { key: true, label: true, type: true, options: true } }),
       prisma.businessSetting.findUnique({ where: { key: "custom.values." + entity + "." + id } }),
       getStandardOverrides(prisma, entity),
       prisma.businessSetting.findUnique({ where: { key: auditPrefix + entity + "." + id } }),
@@ -54,13 +54,29 @@ export async function GET(request: NextRequest) {
         field.key, auditDetails?.[field.key] ?? record[field.key] ?? null,
       ])),
     };
-    const keys = Object.keys(available).filter(key => canRead(entity, key));
+    const keys = Object.keys(available).filter(key => key !== "id" && canRead(entity, key));
+    const customerKeys = new Set(["customerId", ...fields.filter(field => field.type === "LOOKUP" &&
+      Array.isArray(field.options) && field.options[0] === "Customer").map(field => field.key)]);
+    const customerIds = [...new Set(keys.flatMap(key => customerKeys.has(key) && typeof available[key] === "string" && available[key]
+      ? [available[key] as string] : []))];
+    const customerNames = new Map<string, string>();
+    if (customerIds.length && canRead("Customer", "name")) {
+      const customers = await prisma.customer.findMany({
+        where: { id: { in: customerIds } }, select: { id: true, name: true },
+      });
+      for (const customer of customers) customerNames.set(customer.id, customer.name);
+    }
     const layout = await effectiveLayout(prisma, entity, [...labels.keys()], staff?.role, staff?.profileId);
     const sections = resolveLayout(layout, keys, "System Information", {
       hideUnplaced: true, required: systemFields.map(field => field.key),
     }).map(section => ({
       ...section, fields: section.fields.map(key => ({
-        label: recordSystemFields.find(field => field.key === key)?.label ?? labels.get(key) ?? overrides[key]?.label ?? fieldLabel(key), value: available[key],
+        label: recordSystemFields.find(field => field.key === key)?.label ??
+          (key === "customerId" ? overrides[key]?.label ?? "Customer" : labels.get(key) ?? overrides[key]?.label ?? fieldLabel(key)),
+        value: !customerKeys.has(key) ? available[key] :
+          typeof available[key] === "string" && available[key] ? customerNames.get(available[key] as string) ?? "Customer unavailable" : null,
+        ...(customerKeys.has(key) && typeof available[key] === "string" && customerNames.has(available[key] as string)
+          ? { lookup: { entity: "Customer", id: available[key] as string } } : {}),
       })),
     }));
 

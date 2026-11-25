@@ -48,6 +48,11 @@ export default function RecordPage({ record, onClose, onEdit }: {
     setData(null);
   }
 
+  function resetViewAndOpen(next: RecordRef) {
+    resetView();
+    setTrail(previous => [...previous, next]);
+  }
+
   const editRecord = !trail.length && onEdit
     ? onEdit
     : recordFieldsObjects.includes(current.entity) && access.can(current.entity, "EDIT")
@@ -81,7 +86,9 @@ export default function RecordPage({ record, onClose, onEdit }: {
         <h3 className="mb-3 font-semibold">{section.name}</h3>
         <dl className={layoutColumns(section.columns)}>{section.fields.map((field, index) => <div key={index} className="min-w-0">
           <dt className="text-sm text-slate-500">{field.label}</dt>
-          <dd className="break-words text-sm font-medium">{display(field.value)}</dd>
+          <dd className="break-words text-sm font-medium">{field.lookup
+            ? <button type="button" className="text-indigo-700 hover:underline" onClick={() => resetViewAndOpen(field.lookup!)}>{display(field.value)}</button>
+            : display(field.value)}</dd>
         </div>)}</dl>
       </section>) : <p className="text-sm text-slate-500">No fields are available in this layout.</p>)}
       {selected?.lists.map(list => {

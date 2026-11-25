@@ -1,7 +1,14 @@
 ﻿"use client";
+import CustomerLookup from "./customer-lookup";
 import {objectManagerCatalog} from "@/lib/object-manager-catalog";
 import {useEffect,useState} from "react";
 export default function CustomLookup({target,value,required,disabled,onChange}:{target:unknown;value:string;required:boolean;disabled?:boolean;onChange:(value:string)=>void}) {
+  if (target === "Customer") return <CustomerLookup value={value} onChange={onChange} required={required} disabled={disabled}/>;
+  return <OtherLookup target={target} value={value} onChange={onChange} required={required} disabled={disabled}/>;
+}
+function OtherLookup({target,value,required,disabled,onChange}:{
+  target:unknown;value:string;required:boolean;disabled?:boolean;onChange:(value:string)=>void
+}) {
   const [records,setRecords]=useState<{id:string;record:{name:string}}[]>([]);
   const [error,setError]=useState("");
   useEffect(()=>{const controller=new AbortController();setRecords([]);setError("");if(typeof target!=="string"||!target){setError("Lookup target is missing");return ()=>controller.abort()}const standard=Object.prototype.hasOwnProperty.call(objectManagerCatalog,target);fetch(standard?"/api/setup/standard-records?entity="+encodeURIComponent(target):"/api/setup/custom-objects?object="+encodeURIComponent(target),{signal:controller.signal}).then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error);setRecords(standard?data.rows.map((row:Record<string,unknown>)=>({id:String(row.id),record:{name:String(row.name ?? row.number ?? row.brand ?? row.id)}})):data.records)}).catch(e=>{if(!controller.signal.aborted)setError(e.message)});return ()=>controller.abort()},[target]);

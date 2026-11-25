@@ -1,4 +1,5 @@
 "use client";
+import CustomerLookup from "./customer-lookup";
 import {OpenRecordPage} from "./record-page";
 import {CustomValuesButton} from "@/components/custom-values";
 import {NewRecordFields,useNewRecordFields} from "./new-asset-fields";
@@ -58,7 +59,6 @@ export default function LiveOrders(){
 
  function edit(i:number,patch:Partial<Item>){setItems(old=>old.map((v,j)=>i===j?{...v,...patch}:v))}
  const missingLookups = [
-  ...(data.customers.length ? [] : ["an accessible customer"]),
   ...(data.products.length ? [] : ["an accessible active product"]),
  ];
  const total=items.reduce((n,item)=>n+item.qty*Number(item.unitPrice),0);
@@ -78,7 +78,7 @@ export default function LiveOrders(){
     standardValues={{customerId,number:"",status:"DRAFT",total}}
     onStandardChange={(key,value)=>{if(key==="customerId")setCustomer(String(value))}}
     renderStandardField={fieldMeta=>{
-     if(fieldMeta.key==="customerId")return <label className="block text-sm">{fieldMeta.label}{fieldMeta.required?" *":""}<select required={fieldMeta.required} disabled={fieldMeta.editable===false} className={field} value={customerId} onChange={e=>setCustomer(e.target.value)}><option value="">Select customer</option>{data.customers.map(c=><option key={c.id} value={c.id}>{c.name} · {c.phone}</option>)}</select></label>;
+     if(fieldMeta.key==="customerId")return <CustomerLookup required disabled={fieldMeta.editable===false} value={customerId} onChange={setCustomer} label="Customer"/>;
      if(fieldMeta.key==="number")return <div className="text-sm"><p className="font-medium">{fieldMeta.label}</p><p className="mt-1 text-slate-500">Generated when the order is saved</p></div>;
      if(fieldMeta.key==="status")return <div className="text-sm"><p className="font-medium">{fieldMeta.label}</p><p className="mt-1">Draft</p></div>;
      if(fieldMeta.key==="total")return <div className="text-sm"><p className="font-medium">{fieldMeta.label}</p><p className="mt-1">₹{total.toLocaleString("en-IN")}</p></div>;
