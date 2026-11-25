@@ -10,9 +10,10 @@ import {validateRules} from "@/lib/metadata-runtime";
 import {Prisma} from "@prisma/client";
 import {authorizeRequest} from "@/lib/request-access";
 import {assertStaffFieldEdits,canEditStaffField,staffReadableFields} from "@/lib/staff-field-access";
+import { recordFieldsObjects as entities } from "@/lib/record-pages";
 import {permissionObjects} from "@/lib/permissions";
 export const dynamic="force-dynamic";
-const entities=["Customer","Lead","Product","SalesOrder","Quote","ServiceCase","JobCard","Asset","Invoice","Supplier","Stock","PurchaseOrder","Payment","Branch"];
+
 async function findRecord(tx:Prisma.TransactionClient,entity:string,id:string){switch(entity){case "Customer":return tx.customer.findUnique({where:{id}});case "Lead":return tx.lead.findUnique({where:{id}});case "Product":return tx.product.findUnique({where:{id}});case "SalesOrder":return tx.salesOrder.findUnique({where:{id}});case "Quote":return tx.quote.findUnique({where:{id}});case "ServiceCase":return tx.serviceCase.findUnique({where:{id}});case "JobCard":return tx.jobCard.findUnique({where:{id}});case "Asset":return tx.asset.findUnique({where:{id}});case "Invoice":return tx.invoice.findUnique({where:{id}});case "Supplier":return tx.supplier.findUnique({where:{id}});case "Stock":return tx.stock.findUnique({where:{id}});case "PurchaseOrder":return tx.purchaseOrder.findUnique({where:{id}});case "Payment":return tx.payment.findUnique({where:{id}});case "Branch":return tx.branch.findUnique({where:{id}});default:return null}}
 const editableNames = new Set(["Customer", "Lead", "Product", "Supplier", "Branch"]);
 

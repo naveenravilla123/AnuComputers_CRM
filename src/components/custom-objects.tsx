@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { recordSystemFields } from "@/lib/setup-metadata";
 import { objectManagerCatalog } from "@/lib/object-manager-catalog";
 import { fieldLabel } from "@/lib/setup-metadata";
 
@@ -121,7 +122,7 @@ export default function CustomObjects({ settings, standardFields, editableObject
   ].sort((a,b) => a.label.localeCompare(b.label));
   const standardOverrides=(settings.find(item=>item.key==="setup.standardFields."+standard)?.value ?? {}) as Record<string,{label:string;required:boolean}>;
   const objectFields = standard
-    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: standardOverrides[item.key]?.label ?? (item.key === "createdAt" ? "Created Date" : item.key === "updatedAt" ? "Last Modified Date" : fieldLabel(item.key)), required: standardOverrides[item.key]?.required ?? item.required, custom: false })),
+    ? [...objectManagerCatalog[standard].map(item => ({ ...item, label: standardOverrides[item.key]?.label ?? (recordSystemFields.find(field => field.key === item.key)?.label ?? fieldLabel(item.key)), required: standardOverrides[item.key]?.required ?? item.required, custom: false })),
       ...customObjectStandardFields.filter(item => !["Id", "Name"].includes(item.key) && !objectManagerCatalog[standard].some(field => field.key === item.storage))
         .map(item => ({...item, required: false, custom: false})),
       ...standardFields.filter(item => item.entity === standard).map(item => ({ ...item, type: item.type === "LOOKUP" ? "Lookup ? " + item.options?.[0] : item.type, custom: true }))]

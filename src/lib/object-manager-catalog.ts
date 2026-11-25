@@ -1,5 +1,13 @@
 // Fields from the Prisma schema for standard objects exposed in CRM Setup.
 export const objectManagerCatalog: Record<string, {key:string;type:string;required:boolean}[]> = {
+  Branch: [
+    { key: "id", type: "String", required: true },
+    { key: "name", type: "String", required: true },
+    { key: "address", type: "String", required: false },
+    { key: "businessId", type: "String", required: true },
+    { key: "business", type: "Lookup → Business", required: true },
+    { key: "stocks", type: "Related list → Stock", required: false },
+  ],
   Customer: [
     { key: "id", type: "String", required: true },
     { key: "name", type: "String", required: true },

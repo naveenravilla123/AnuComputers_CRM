@@ -1,4 +1,5 @@
 "use client";
+import {OpenRecordPage} from "./record-page";
 import {CustomValuesButton} from "@/components/custom-values";
 import {NewRecordFields,useNewRecordFields} from "./new-asset-fields";
 import {useEffect,useState} from "react";
@@ -102,7 +103,7 @@ export default function LiveOrders(){
    <SalesFilters query={search} onQuery={setSearch} status={statusFilter} onStatus={setStatusFilter} statuses={["DRAFT","CONFIRMED","DELIVERED","CANCELLED"]}/>
    <SalesTable headers={["Order","Customer / enquiry","Items","Total (₹)","Status and next action"]} busy={busy} empty={!data.orders.some(o=>(!statusFilter||o.status===statusFilter)&&[o.number,o.customer?.name,o.status,...o.items.map(i=>i.product?.name)].join(" ").toLowerCase().includes(search.toLowerCase()))}>
     {data.orders.filter(o=>(!statusFilter||o.status===statusFilter)&&[o.number,o.customer?.name,o.status,...o.items.map(i=>i.product?.name)].join(" ").toLowerCase().includes(search.toLowerCase())).map(o=><tr key={o.id}>
-     <td className="break-all font-semibold">{o.number}<CustomValuesButton entity="SalesOrder" id={o.id}/><p className="text-xs text-slate-500">{data.branches.find(b=>b.id===data.branchByOrder[o.id])?.name||"No branch assigned"}</p></td>
+     <td className="break-all font-semibold">{o.number}<OpenRecordPage entity="SalesOrder" id={o.id}/><CustomValuesButton entity="SalesOrder" id={o.id}/><p className="text-xs text-slate-500">{data.branches.find(b=>b.id===data.branchByOrder[o.id])?.name||"No branch assigned"}</p></td>
      <td>{o.customer?.name??"—"}</td>
      <td><details><summary className="cursor-pointer">{o.items.length} lines</summary>{o.items.map(i=><p key={i.id} className="text-xs">{i.product?.name} × {i.qty} @ ₹{i.unitPrice}</p>)}</details></td>
      <td className="tabular-nums">{o.total==null?"—":Number(o.total).toLocaleString("en-IN")}</td>

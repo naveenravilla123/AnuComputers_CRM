@@ -1,5 +1,6 @@
 "use client";
 import MetadataFields,{type Field,type Values} from "./metadata-fields";
+import {OpenRecordPage} from "./record-page";
 import {CustomValuesButton} from "@/components/custom-values";
 import {useEffect,useState} from "react";
 import {SalesTable,SalesFilters,SalesStatus,statusLabel} from "./sales-table";
@@ -47,7 +48,7 @@ return <section className="space-y-5">
   </form>}
   <SalesFilters query={query} onQuery={setQuery} status={filter} onStatus={setFilter} statuses={stages} showStatus={canRead("stage")}/>
   {mode==="Opportunities"?<div className="flex gap-3 overflow-x-auto pb-4">{stages.filter(s=>!canRead("stage")||!filter||s===filter).map(s=><div key={s} className="min-w-[250px] flex-1 space-y-3 rounded-xl bg-slate-100 p-3"><h3 className="font-bold">{s}</h3>{visible.filter(r=>r.stage===s).map(tile)}</div>)}</div>:<SalesTable headers={headers} empty={!visible.length} busy={busy} emptyMessage={canCreateLead?"No matching records. Change filters or create a record.":"No matching enquiries."}>{visible.map(r=><tr key={r.id}>
-    {canRead("name")&&<td className="font-semibold">{r.name}{canEditLead&&<CustomValuesButton entity="Lead" id={r.id} onSaved={()=>setRevision(v=>v+1)}/>}</td>}
+    {canRead("name")&&<td className="font-semibold">{r.name}<OpenRecordPage entity="Lead" id={r.id}/>{canEditLead&&<CustomValuesButton entity="Lead" id={r.id} onSaved={()=>setRevision(v=>v+1)}/>}</td>}
     {canRead("phone")&&<td>{r.phone||"—"}</td>}
     {canRead("interest")&&<td>{r.interest||"—"}</td>}
     {canRead("source")&&<td>{statusLabel(r.source)}</td>}

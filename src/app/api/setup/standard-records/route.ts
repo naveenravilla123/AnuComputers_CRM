@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validSession } from "@/lib/session";
+import { resolveRecordAudit } from "@/lib/record-audit-details";
 import { auditPrefix, enableRecordAudit, isStandardObject, standardRecords } from "@/lib/standard-records";
 
 export const dynamic = "force-dynamic";
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 const signedIn = (request: NextRequest) => validSession(request.cookies.get("anu_session")?.value);
-const trackingKey = "setup.standardRecordAudit.v2";
+const trackingKey = "setup.standardRecordAudit.v3";
 
 export async function GET(request: NextRequest) {
   if (!await signedIn(request)) return fail("Unauthorized", 401);
@@ -29,27 +30,7 @@ export async function GET(request: NextRequest) {
     const customValues = id ? await prisma.businessSetting.findUnique({
       where: { key: "custom.values." + entity + "." + id },
     }) : null;
-    const auditValue = audit?.value;
-    const details = auditValue && typeof auditValue === "object" && !Array.isArray(auditValue)
-      ? { ...auditValue } : null;
-    if (details) {
-      const actorFields = ["createdBy", "lastModifiedBy", "owner"];
-      const staffIds = actorFields.flatMap(key => {
-        const value = details[key];
-        return typeof value === "string" && value.startsWith("staff:") ? [value.slice(6)] : [];
-      });
-      if (staffIds.length) {
-        const staff = await prisma.staff.findMany({
-          where: { id: { in: staffIds } }, select: { id: true, name: true },
-        });
-        for (const key of actorFields) {
-          const value = details[key];
-          if (typeof value === "string" && value.startsWith("staff:")) {
-            details[key] = staff.find(user => user.id === value.slice(6))?.name || value.slice(6);
-          }
-        }
-      }
-    }
+    const details = await resolveRecordAudit(prisma, audit?.value);
     return NextResponse.json({ rows, hasMore, tracking: !!tracking, audit: details,
       customValues: customValues?.value ?? {} }, { headers: { "Cache-Control": "no-store" } });
   } catch {

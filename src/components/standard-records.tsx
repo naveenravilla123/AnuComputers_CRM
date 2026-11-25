@@ -1,5 +1,7 @@
 "use client";
 
+import RecordPage from "./record-page";
+import { recordPageObjects } from "@/lib/record-pages";
 import { useEffect, useState } from "react";
 import { customObjectStandardFields } from "@/lib/custom-object-fields";
 import { fieldLabel } from "@/lib/setup-metadata";
@@ -28,6 +30,7 @@ export default function StandardRecords({ entity, customFields }: {
   entity: string;
   customFields: { key: string; label: string }[];
 }) {
+  const [showPage, setShowPage] = useState(false);
   const [selected, setSelected] = useState("");
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
@@ -74,6 +77,8 @@ export default function StandardRecords({ entity, customFields }: {
   const record = selected ? data?.rows[0] : undefined;
   const recordLabel = (row: RecordData) => String(row.name ?? row.number ?? row.sku ?? row.issue ?? row.id);
 
+  if (showPage && selected) return <RecordPage record={{ entity, id: selected }} onClose={() => setShowPage(false)} />;
+
   return <section className="space-y-4 border-t pt-4">
     <h4 className="font-semibold">{selected ? "Record Details" : "Records"}</h4>
     {error && <p role="alert">{error}</p>}
@@ -88,6 +93,8 @@ export default function StandardRecords({ entity, customFields }: {
       <button type="button" className="text-indigo-700" onClick={() => setSelected("")}>← Back to Records</button>
       {record && <>
         <h5 className="text-lg font-semibold">{recordLabel(record)}</h5>
+        {recordPageObjects.includes(entity) && <button type="button" className="rounded border px-3 py-2"
+          onClick={() => setShowPage(true)}>Open record page</button>}
         <RecordDetails fields={[
           ...customObjectStandardFields.filter(field => field.key !== "Name").map(field => ({
             label: field.label, value: field.storage === "id" ? record.id

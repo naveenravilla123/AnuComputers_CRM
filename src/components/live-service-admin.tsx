@@ -1,6 +1,7 @@
 "use client";
 
 import {useNewAssetFields,NewAssetFields,NewRecordFields,useNewRecordFields} from "./new-asset-fields";
+import {OpenRecordPage} from "./record-page";
 import {CustomValuesButton} from "./custom-values";
 import {useEffect,useState} from "react";
 import {useStaffAccess} from "./staff-access-context";
@@ -120,7 +121,7 @@ export default function LiveServiceAdmin({mode}:{mode:string}){
     <h3 className="font-bold">{item.asset.customer.name} · {item.asset.brand} {item.asset.model}</h3>
     <p>{item.type} · {warrantyStatus(item.startDate,item.endDate)} · {date(item.startDate)} – {date(item.endDate)}</p>
     <p>{item.asset.serialNumber} · {item.terms}</p>
-    <div className="mt-2 flex gap-4">{canEditWarranty&&<button className="text-indigo-700" onClick={()=>setWarranty({id:item.id,assetId:item.asset.id,type:item.type,startDate:date(item.startDate),endDate:date(item.endDate),terms:item.terms||""})}>Edit warranty</button>}{staffAccess.can("Warranty","EDIT")&&<CustomValuesButton entity="Warranty" id={item.id} label="Custom fields" onSaved={()=>setRevision(value=>value+1)}/>}</div>
+    <div className="mt-2 flex gap-4">{canEditWarranty&&<button className="text-indigo-700" onClick={()=>setWarranty({id:item.id,assetId:item.asset.id,type:item.type,startDate:date(item.startDate),endDate:date(item.endDate),terms:item.terms||""})}>Edit warranty</button>}<OpenRecordPage entity="Warranty" id={item.id}/>{staffAccess.can("Warranty","EDIT")&&<CustomValuesButton entity="Warranty" id={item.id} label="Custom fields" onSaved={()=>setRevision(value=>value+1)}/>}</div>
    </article>)}
   </>}
  </section>;
