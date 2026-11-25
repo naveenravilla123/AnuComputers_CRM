@@ -1,6 +1,6 @@
 import { standardCatalog } from "./setup-metadata";
 
-type Relation = { key: string; label: string; target: string; columns: string[]; path: string[]; source?: string };
+type Relation = { key: string; label: string; target: string; columns: string[]; path: string[]; source?: string; convertedQuoteOrders?: true };
 const link = (key: string, label: string, target: string, columns: string[], ...path: string[]): Relation =>
   ({ key, label, target, columns, path });
 
@@ -27,7 +27,9 @@ const salesOrder = parent("order", "Sales Order", "SalesOrder", "orderId", "numb
 
 const relationships: Record<string, Relation[]> = {
   Customer: [enquiries, quotes, orders, cases, assets, warranties, invoices, payments],
-  Lead: [customer, via(quotes, "leadId")],
+  Lead: [customer, via(quotes, "leadId"), {
+    ...via(orders, "id"), convertedQuoteOrders: true,
+  }],
   Quote: [parent("lead", "Enquiry", "Lead", "leadId", "name", "stage")],
   Stock: [product, branch],
   Product: [via(assets, "productId"), link("stocks", "Stock", "Stock", ["qty", "reserved", "reorderPoint"], "productId")],
@@ -60,6 +62,7 @@ export function defaultRecordTabs(entity: string): RecordTab[] {
 export const recordPageObjects = Object.keys(standardCatalog);
 export type RecordPageData = {
   title: string;
+  quoteExpiry?: string;
   sections: { name: string; columns: number; fields: { label: string; value: unknown; lookup?: { entity: string; id: string } }[] }[];
   tabs: { label: string; lists: { key: string; label: string; target: string; columns: { key: string; label: string }[];
     rows: { id: string; [key: string]: unknown }[]; hasMore: boolean }[] }[];

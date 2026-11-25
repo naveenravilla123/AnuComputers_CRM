@@ -4,22 +4,34 @@ import {useEffect,useState} from "react";
 import {NewRecordFields,useNewRecordFields} from "./new-asset-fields";
 import {useStaffAccess} from "./staff-access-context";
 
-type Data={products:{id:string;name:string;sku:string}[];branches:{id:string;name:string}[];stocks:{id:string;qty:number;reserved:number;reorderPoint:number;product:{name:string;sku:string};branch:{name:string}}[]};
+type Data={products:{id:string;name:string;sku:string}[];branches:{id:string;name:string}[];stocks:{id:string;qty:number;reserved:number;reorderPoint:number;product:{id:string;name:string;sku:string};branch:{name:string}}[]};
 const field="w-full rounded-xl border p-3";
 const button="rounded-xl bg-indigo-600 px-4 py-2 text-white disabled:opacity-50";
 
-export default function LiveInventory(){
+export default function LiveInventory({spareParts=false}:{spareParts?:boolean}){
  const staff=useStaffAccess();
- const canCreateBranch=staff.can("Branch","CREATE")&&staff.canEdit("Branch","name");
+ const canCreateBranch=!spareParts&&staff.can("Branch","CREATE")&&staff.canEdit("Branch","name");
  const canAdjustStock=staff.can("Stock","EDIT")&&staff.canEdit("Stock","qty");
  const canEditStock=staff.can("Stock","EDIT");
  const [data,setData]=useState<Data>({products:[],branches:[],stocks:[]});
  const [search,setSearch]=useState(""),[low,setLow]=useState(false),[location,setLocation]=useState(""),[branch,setBranch]=useState(""),[product,setProduct]=useState(""),[delta,setDelta]=useState(""),[reason,setReason]=useState(""),[name,setName]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0);
  const branchFields=useNewRecordFields("Branch"),stockFields=useNewRecordFields("Stock");
- useEffect(()=>{const c=new AbortController();setBusy(true);fetch("/api/inventory",{signal:c.signal}).then(async r=>{const x=await r.json();if(!r.ok)throw new Error(x.error);setData(x)}).catch(e=>{if(!c.signal.aborted)setError(e.message)}).finally(()=>{if(!c.signal.aborted)setBusy(false)});return()=>c.abort()},[revision]);
+ useEffect(()=>{const c=new AbortController();setBusy(true);fetch(spareParts?"/api/inventory?view=spare-parts":"/api/inventory",{signal:c.signal}).then(async r=>{const x=await r.json();if(!r.ok)throw new Error(x.error);setData(x)}).catch(e=>{if(!c.signal.aborted)setError(e.message)}).finally(()=>{if(!c.signal.aborted)setBusy(false)});return()=>c.abort()},[revision,spareParts]);
  async function submit(body:Record<string,unknown>){if(busy)return;setBusy(true);setError("");try{const r=await fetch("/api/inventory",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.error);setDelta("");setReason("");setName("");branchFields.setValues({});stockFields.setValues({});setRevision(v=>v+1)}catch(e){setError(e instanceof Error?e.message:"Operation failed")}finally{setBusy(false)}}
  const visible=data.stocks.filter(s=>(!low||s.qty-s.reserved<=s.reorderPoint)&&(!location||s.branch.name===location)&&[s.product.name,s.product.sku].join(" ").toLowerCase().includes(search.toLowerCase()));
  return <section className="space-y-5">
+  {spareParts&&<section className="space-y-3 rounded-xl border bg-white p-4">
+    <h2 className="font-semibold">Spare parts catalog</h2>
+    {!data.products.length&&!busy&&<p className="text-sm text-slate-600">No active products are categorized as Spare Parts.</p>}
+    {!!data.products.length&&<table className="w-full text-left text-sm">
+      <thead><tr><th scope="col">Part</th><th scope="col">SKU</th><th scope="col">Available</th></tr></thead>
+      <tbody>{data.products.map(part=><tr key={part.id} className="border-t">
+        <td className="py-2"><OpenRecordPage entity="Product" id={part.id}>{part.name}</OpenRecordPage></td>
+        <td>{part.sku}</td><td>{data.stocks.filter(stock=>stock.product.id===part.id)
+          .reduce((total,stock)=>total+stock.qty-stock.reserved,0)}</td>
+      </tr>)}</tbody>
+    </table>}
+  </section>}
   {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
   <div className="grid gap-4 md:grid-cols-3">{[["Stock units",data.stocks.reduce((n,s)=>n+s.qty,0)],["Available units",data.stocks.reduce((n,s)=>n+s.qty-s.reserved,0)],["Low stock entries",data.stocks.filter(s=>s.qty-s.reserved<=s.reorderPoint).length]].map(([label,value])=><div key={label} className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}</div>
   {(canCreateBranch||canAdjustStock)&&<div className="grid gap-4 lg:grid-cols-2">

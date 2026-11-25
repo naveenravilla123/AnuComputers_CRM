@@ -183,3 +183,15 @@ test("workspace navigation supports moving and hiding items without adding unaut
   assert.equal(parseNavigation([{ id: "CRM Setup", group: "Overview", visible: false }]), null);
   assert.equal(parseNavigation([defaultNavigation[0], defaultNavigation[0]]), null);
 });
+
+test("consolidated navigation preserves payment records and the enquiry sales relationships", () => {
+  const { defaultNavigation } = load("src/lib/workspace-navigation.ts");
+  const shortcuts = defaultNavigation.map(item => item.id);
+  assert.ok(shortcuts.includes("Invoices") && shortcuts.includes("Enquiries"));
+  assert.ok(!shortcuts.includes("Payments") && !shortcuts.includes("Opportunities"));
+  const invoice = catalog.recordRelationships("Invoice");
+  assert.equal(invoice.find(item => item.key === "payments")?.target, "Payment");
+  const enquiry = catalog.recordRelationships("Lead");
+  assert.equal(enquiry.find(item => item.key === "quotes")?.target, "Quote");
+  assert.equal(enquiry.find(item => item.key === "orders")?.convertedQuoteOrders, true);
+});

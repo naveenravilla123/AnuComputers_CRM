@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeRequest } from "@/lib/request-access";
 import type { PermissionObject } from "@/lib/permissions";
-import { canReadStaffField } from "@/lib/staff-field-access";
+import { canEditStaffField, canReadStaffField } from "@/lib/staff-field-access";
 import { accessibleJobIds, canAccessServiceRecord } from "@/lib/record-sharing";
 import { resolveRecordAudit } from "@/lib/record-audit-details";
 import { auditPrefix, standardRecords } from "@/lib/standard-records";
@@ -98,6 +98,18 @@ export async function GET(request: NextRequest) {
         const where = relation.path.reduceRight<Record<string, unknown>>(
           (filter, key, index) => ({ [key]: index === relation.path.length - 1 ? targetId : filter }), {},
         );
+        if (relation.convertedQuoteOrders) {
+          if (!canRead("Quote", "leadId")) return null;
+          const leadQuotes = await prisma.quote.findMany({ where: { leadId: id }, select: { id: true } });
+          const conversions = leadQuotes.length ? await prisma.auditLog.findMany({
+            where: { action: "QUOTE_CONVERTED", entity: "Quote", entityId: { in: leadQuotes.map(quote => quote.id) } },
+            select: { after: true },
+          }) : [];
+          where.id = { in: conversions.flatMap(({ after }) => {
+            if (!after || Array.isArray(after) || typeof after !== "object") return [];
+            return typeof after.orderId === "string" ? [after.orderId] : [];
+          }) };
+        }
         if (staff && (relation.target === "JobCard" || relation.target === "ServiceCase")) {
           const jobs = await accessibleJobIds(prisma, staff);
           if (jobs) {
@@ -121,6 +133,9 @@ export async function GET(request: NextRequest) {
     const title = ["name", "number", "issue", "sku"].find(key => canRead(entity, key) && record[key]);
     const result: RecordPageData = {
       title: title ? String(record[title]) : fieldLabel(entity),
+      ...(entity === "Quote" && record.status === "DRAFT" && canRead("Quote", "status")
+        && (!staff || staff.permissions.includes("Quote:EDIT") && canEditStaffField(staff, "Quote", "expiresAt"))
+        && { quoteExpiry: typeof record.expiresAt === "string" ? record.expiresAt.slice(0, 10) : "" }),
       sections,
       tabs: tabs.flatMap(tab => {
         const lists = tab.lists.flatMap(key => readableLists.filter(list => list?.key === key && list !== null))

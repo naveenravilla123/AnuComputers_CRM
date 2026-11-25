@@ -26,7 +26,25 @@ export async function POST(r:NextRequest){
    assertStaffFieldEdits(staff,"Quote",["status"]);
    assertStaffFieldEdits(staff,"SalesOrder",["number","customerId","status","total"]);
    if(!canReadStaffFields(staff,[["Quote","status"],["Quote","leadId"]]))return fail("Forbidden",403);
-  }else if(staff)assertStaffFieldEdits(staff,"Quote",["status"]);
+  }else if(staff)assertStaffFieldEdits(staff,"Quote",x.action==="editExpiry"?["expiresAt"]:["status"]);
+  if (x.action === "editExpiry") {
+    const input = x.expiresAt;
+    if (typeof input !== "string" || !x.id) return fail("Quotation and expiry date required");
+    const expiresAt = input ? new Date(input + "T23:59:59+05:30") : null;
+    if (expiresAt && (!/^\d{4}-\d{2}-\d{2}$/.test(input) || !Number.isFinite(expiresAt.getTime()) ||
+      expiresAt.toISOString().slice(0, 10) !== input || expiresAt <= new Date())) return fail("Invalid expiry date");
+    const updated = await auditedSalesWrite(auth.access, async tx => {
+      const changed = await tx.quote.updateMany({ where: { id: String(x.id), status: "DRAFT" }, data: { expiresAt } });
+      if (!changed.count) return null;
+      const quote = await tx.quote.findUniqueOrThrow({ where: { id: String(x.id) } });
+      await validateRecord(tx, "Quote", quote);
+      await tx.auditLog.create({ data: { action: "QUOTE_EDIT_EXPIRY", entity: "Quote", entityId: quote.id,
+        after: { expiresAt: expiresAt?.toISOString() ?? null } } });
+      return quote;
+    }, { isolationLevel: "Serializable" });
+    if (!updated) return fail("Only draft quotations can be edited", 409);
+    return NextResponse.json(staff ? filterStaffRecord(staff, "Quote", updated) : updated);
+  }
   if(x.action==="create"){
    if(!x.leadId||!Array.isArray(x.items)||!x.items.length||x.items.length>100)return fail("Select a lead and 1–100 products");
    const items=x.items.map((i:any)=>{if(!i.productId||!Number.isSafeInteger(i.qty)||i.qty<1||i.qty>1000000||!/^\d{1,10}(\.\d{1,2})?$/.test(String(i.unitPrice)))throw new Error("Invalid line item");return {productId:String(i.productId),qty:i.qty,unitPrice:new Prisma.Decimal(String(i.unitPrice))}});

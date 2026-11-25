@@ -28,6 +28,27 @@ export default function RecordPage({ record, onClose, onEdit, actions, revision:
   const [data, setData] = useState<RecordPageData | null>(null);
   const [error, setError] = useState("");
   const current = record;
+  const [quoteExpiry, setQuoteExpiry] = useState<string | null>(null);
+  const [savingQuote, setSavingQuote] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
+
+  async function saveQuoteExpiry() {
+    setSavingQuote(true);
+    setQuoteError("");
+    try {
+      const response = await fetch("/api/quotes", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "editExpiry", id: current.id, expiresAt: quoteExpiry }),
+      });
+      if (!response.ok) throw Error((await response.json()).error);
+      setQuoteExpiry(null);
+      setRevision(value => value + 1);
+    } catch (reason) {
+      setQuoteError(reason instanceof Error ? reason.message : "Unable to edit quotation");
+    } finally {
+      setSavingQuote(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,8 +82,18 @@ export default function RecordPage({ record, onClose, onEdit, actions, revision:
           <p className="text-sm text-slate-500">{fieldLabel(current.entity)}</p>
           <h2 className="break-words text-xl font-semibold text-slate-950">{data.title}</h2>
         </div>
-        <div className="flex flex-wrap items-center gap-2">{actions}{editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{onEdit ? "Edit" : "Edit record fields"}</button>}</div>
+        <div className="flex flex-wrap items-center gap-2">{actions}
+          {data.quoteExpiry !== undefined && <button type="button" className="rounded-lg border bg-white px-4 py-2"
+            onClick={() => { setQuoteError("");setQuoteExpiry(data.quoteExpiry ?? ""); }}>Edit quotation</button>}{editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{onEdit ? "Edit" : "Edit record fields"}</button>}</div>
       </header>
+      {quoteExpiry !== null && <form className="flex flex-wrap items-end gap-3 rounded-lg border p-4"
+        onSubmit={event => { event.preventDefault(); void saveQuoteExpiry(); }}>
+        <label className="text-sm font-medium">Expiry date<input type="date" className="block rounded border p-2"
+          value={quoteExpiry} onChange={event => setQuoteExpiry(event.target.value)}/></label>
+        <button type="submit" className="rounded bg-indigo-600 px-4 py-2 text-white" disabled={savingQuote}>Save quotation</button>
+        <button type="button" disabled={savingQuote} onClick={() => setQuoteExpiry(null)}>Cancel</button>
+        {quoteError && <p role="alert">{quoteError}</p>}
+      </form>}
       {editingFields && <CustomValues entity={current.entity} id={current.id}
         onClose={() => setEditingFields(false)} onSaved={() => setRevision(value => value + 1)}/>}
       <nav aria-label="Record sections" className="flex flex-wrap gap-2 border-b">

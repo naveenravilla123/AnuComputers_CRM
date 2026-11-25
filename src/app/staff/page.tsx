@@ -60,7 +60,6 @@ const modules:Module[]=[
   {id:"Quotations",group:"Sales",icon:FileText,grants:["Quote:READ"]},
   {id:"Sales Orders",group:"Sales",icon:ShoppingCart,grants:["SalesOrder:READ"]},
   {id:"Invoices",group:"Finance",icon:ReceiptText,grants:["Invoice:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","SalesOrder:READ","Payment:READ"],fields:[...fields("Customer","name","phone"),...fields("Product","name","sku","price"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("SalesOrder","number","total"),...fields("Invoice","number","status","subtotal","tax","discount","total"),...fields("Payment","amount","method","reference","paidAt")]},
-  {id:"Payments",group:"Finance",icon:Wallet,grants:["Invoice:READ","Customer:READ","Product:READ","Stock:READ","Branch:READ","SalesOrder:READ","Payment:READ"],fields:[...fields("Customer","name","phone"),...fields("Product","name","sku","price"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("SalesOrder","number","total"),...fields("Invoice","number","status","subtotal","tax","discount","total"),...fields("Payment","amount","method","reference","paidAt")]},
   {id:"Service Cases",group:"Service",icon:Headphones,grants:["ServiceCase:READ","Customer:READ","Asset:READ","JobCard:READ","Staff:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"],fields:[...fields("Customer","name","phone"),...fields("ServiceCase","issue","status","priority","estimate"),...fields("Asset","brand","model","serialNumber","condition","receivedAccessories"),...fields("JobCard","diagnosis","notes","laborCost","status","technicianId"),...fields("Staff","name"),...fields("Product","name","sku","price","cost"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("Invoice","number")]},
   {id:"Job Cards",group:"Service",icon:ClipboardList,grants:["ServiceCase:READ","Customer:READ","Asset:READ","JobCard:READ","Staff:READ","Product:READ","Stock:READ","Branch:READ","Invoice:READ"],fields:[...fields("Customer","name","phone"),...fields("ServiceCase","issue","status","priority","estimate"),...fields("Asset","brand","model","serialNumber","condition","receivedAccessories"),...fields("JobCard","diagnosis","notes","laborCost","status","technicianId"),...fields("Staff","name"),...fields("Product","name","sku","price","cost"),...fields("Stock","qty","reserved","branchId"),...fields("Branch","name"),...fields("Invoice","number")]},
   {id:"Warranties",group:"Service",icon:ShieldCheck,grants:["Asset:READ","Warranty:READ","Staff:READ","JobCard:READ","ServiceCase:READ","Customer:READ","Product:READ"],fields:[...fields("Staff","name","email","role","active"),...fields("JobCard","status"),...fields("ServiceCase","issue"),...fields("Customer","name"),...fields("Asset","brand","model","serialNumber","customerId"),...fields("Warranty","type","startDate","endDate","terms"),...fields("Product","name","brand")]},
@@ -78,7 +77,8 @@ export default function StaffPortal(){
   const [user,setUser]=useState<User|null>(null),[jobs,setJobs]=useState<Job[]>([]);
   const [email,setEmail]=useState(""),[password,setPassword]=useState("");
   const [error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
-  const requestedModule=useCrmUrl().get("module");
+  const moduleParam=useCrmUrl().get("module");
+  const requestedModule=moduleParam==="Opportunities"?"Enquiries":moduleParam==="Payments"?"Invoices":moduleParam;
   const available=useMemo(()=>user?[homeModule,...modules].filter(module=>
     (!module.technicianOnly||user.role==="TECHNICIAN")&&module.grants.every(grant=>user.permissions.includes(grant))&&
     (module.fields||[]).every(grant=>user.fieldPermissions.includes(grant))
@@ -95,7 +95,7 @@ export default function StaffPortal(){
     !!user && canUseCheckout(staffAccessRules(user));
   const [bookRepair,setBookRepair]=useState(false);
   const [attention,setAttention]=useState("");
-  const routedRecord=useRoutedRecord(active==="Customers"?"Customer":active==="Enquiries"||active==="Opportunities"?"Lead":undefined);
+  const routedRecord=useRoutedRecord(active==="Customers"?"Customer":active==="Enquiries"?"Lead":undefined);
 
   const load=useCallback(async()=>{
     setError("");
@@ -141,13 +141,13 @@ export default function StaffPortal(){
         allowedModules={available.map(module=>module.id)}/></div>;
       case "My Jobs":return <MyJobs jobs={jobs}/>;
       case "Customers":return <Customers open={false} onClose={()=>{}} staffAccess={staffAccess}/>;
-      case "Enquiries":return <LiveLeads mode="Enquiries" staffAccess={staffAccess}/>;
+      case "Enquiries":return <LiveLeads staffAccess={staffAccess}/>;
       case "Products":return <LiveProducts open={false} onClose={()=>{}}/>;
       case "Inventory":return <LiveInventory/>;
       case "Suppliers":return <LivePurchases mode="Suppliers"/>;
       case "Quotations":return <LiveQuotes/>;
       case "Sales Orders":return <LiveOrders/>;
-      case "POS Billing":case "Invoices":case "Payments":return <LiveBilling key={active} mode={active}/>;
+      case "POS Billing":case "Invoices":return <LiveBilling key={active} mode={active}/>;
       case "Service Cases":case "Job Cards":return <LiveRepairs key={active} mode={active} initialIntake={bookRepair}/>;
       case "Warranties":return <LiveServiceAdmin mode="Warranties"/>;
       case "After Sales":return <LiveAfterSales/>;

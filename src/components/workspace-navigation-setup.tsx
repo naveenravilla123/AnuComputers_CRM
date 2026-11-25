@@ -65,16 +65,22 @@ export default function WorkspaceNavigationSetup() {
             onChange={event => update(items.map(row => row.id === item.id ? { ...row, group: event.target.value as NavigationItem["group"] } : row))}>
             {navigationGroups.map(group => <option key={group}>{group}</option>)}
           </select>
-          {([-1, 1] as const).map(direction => <button type="button" key={direction}
-            aria-label={`Move ${item.label ?? item.id} ${direction < 0 ? "up" : "down"}`}
-            className="rounded border px-2 py-1 text-sm disabled:opacity-30"
-            title={search.trim() ? "Clear search to reorder shortcuts" : undefined}
-            disabled={!!search.trim() || index + direction < 0 || index + direction >= items.length}
-            onClick={() => {
-              const reordered = [...items];
-              [reordered[index], reordered[index + direction]] = [reordered[index + direction], item];
-              update(reordered);
-            }}>{direction < 0 ? "↑" : "↓"}</button>)}
+          {([-1, 1] as const).map(direction => {
+            const peers = items.map((candidate, peer) => ({ candidate, peer })).filter(({ candidate }) =>
+              candidate.group === item.group && candidate.visible === item.visible);
+            const position = peers.findIndex(({ peer }) => peer === index);
+            const neighbor = peers[position + direction]?.peer;
+            return <button type="button" key={direction}
+              title="Move within this group"
+              aria-label={`Move ${item.label ?? item.id} ${direction < 0 ? "up" : "down"}`}
+              className="rounded border px-2 py-1 text-sm disabled:opacity-30" disabled={neighbor === undefined}
+              onClick={() => {
+                if (neighbor === undefined) return;
+                const reordered = [...items];
+                [reordered[index], reordered[neighbor]] = [reordered[neighbor], item];
+                update(reordered);
+              }}>{direction < 0 ? "↑" : "↓"}</button>;
+          })}
         </div>
       </li>)}</ul>
       <div className="flex gap-3">

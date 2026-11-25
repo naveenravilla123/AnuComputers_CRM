@@ -108,7 +108,7 @@ export default function StandardRecords({ entity, customFields }: {
       {data && !!data.rows.length && <ul className="divide-y rounded border">
         {data.rows.map(row => <li key={String(row.id)}>
           <button type="button" className="w-full break-words p-3 text-left text-indigo-700 hover:bg-slate-50"
-            onClick={() => setSelected(String(row.id))}>{recordLabel(row)}</button>
+            onClick={() => recordPageObjects.includes(entity) ? openCrmRecord({ entity, id: String(row.id) }) : setSelected(String(row.id))}>{recordLabel(row)}</button>
         </li>)}
       </ul>}
       {(offset > 0 || data?.hasMore) && <div className="flex gap-3">

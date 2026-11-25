@@ -22,7 +22,7 @@ export async function GET(r:NextRequest){
   const scopedIds=auth.access.kind==="staff"?await accessibleJobIds(prisma,auth.access.user):null;
   const [customers,cases,technicians,products,branches]=await Promise.all([
    prisma.customer.findMany({where:scopedIds===null?undefined:{cases:{some:{jobs:{some:{id:{in:scopedIds}}}}}},select:{id:true,name:true,phone:true}}),
-   prisma.serviceCase.findMany({where:scopedIds===null?undefined:{jobs:{some:{id:{in:scopedIds}}}},include:{customer:true,asset:true,jobs:{include:{technician:true,parts:{include:{product:true}}}},invoices:true},orderBy:{createdAt:"desc"}}),
+   prisma.serviceCase.findMany({where:scopedIds===null?undefined:{jobs:{some:{id:{in:scopedIds}}}},include:{customer:true,asset:true,jobs:{...(scopedIds===null?{}:{where:{id:{in:scopedIds}}}),include:{technician:true,parts:{include:{product:true}}}},invoices:true},orderBy:{createdAt:"desc"}}),
    prisma.staff.findMany({where:{active:true,role:"TECHNICIAN"}}),
    prisma.product.findMany({where:{active:true},include:{stocks:true}}),
    prisma.branch.findMany(),

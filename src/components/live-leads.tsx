@@ -23,7 +23,7 @@ const standardFields: Field[] = [
   { key: "stage", label: "Stage", type: "PICKLIST", required: true, options: stages },
 ];
 
-export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAccess?: StaffAccess }) {
+export default function LiveLeads({ staffAccess }: { staffAccess?: StaffAccess }) {
   const [rows, setRows] = useState<Lead[]>([]);
   const [form, setForm] = useState<Form | null>(null);
   const [query, setQuery] = useState("");
@@ -50,7 +50,8 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
   const route = useCrmUrl();
   const recordId = route.get("object") === "Lead" ? route.get("record") : null;
   const current = rows.find(row => row.id === recordId);
-  const isBoard = mode === "Opportunities";
+  const [view, setView] = useState<"list" | "board">(() => route.get("module") === "Opportunities" ? "board" : "list");
+  const isBoard = view === "board";
 
   useEffect(() => {
     if (formId === undefined) return;
@@ -163,7 +164,11 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
     {recordId && !form && error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
     <section hidden={!!recordId} className="space-y-4 rounded-2xl border bg-white p-4 sm:p-5">
     <div className="flex items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">{mode}</h2>
+      <h2 className="text-lg font-semibold">Enquiries</h2>
+      {canRead("stage") && <div role="group" aria-label="Enquiry view" className="flex gap-2">
+        {(["list", "board"] as const).map(option => <button key={option} type="button" aria-pressed={view === option}
+          className="rounded-lg border px-3 py-2 capitalize" onClick={() => setView(option)}>{option}</button>)}
+      </div>}
       {canCreateLead && <button type="button" className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white"
         onClick={() => openForm()}><Plus size={16}/> New enquiry</button>}
     </div>
