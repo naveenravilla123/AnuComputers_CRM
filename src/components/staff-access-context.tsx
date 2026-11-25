@@ -12,7 +12,10 @@ export function StaffAccessProvider({access,children}:{access:StaffAccess;childr
 }
 
 export function useStaffAccess(){
-  const access=useContext(StaffAccessContext);
+  return staffAccessRules(useContext(StaffAccessContext));
+}
+
+export function staffAccessRules(access: StaffAccess | null){
   return {
     access,
     can: (entity:string,action:"READ"|"CREATE"|"EDIT"|"DELETE") =>

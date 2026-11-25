@@ -66,8 +66,3 @@ export default function CustomValues({entity,id,onClose,onSaved}:{entity:string;
   <button disabled={busy||!ready||!canSave} className="rounded-xl bg-indigo-600 px-4 py-3 text-white disabled:opacity-50">Save record fields</button>
  </form></div>;
 }
-
-export function CustomValuesButton({entity,id,label="Record fields",onSaved}:{entity:string;id:string;label?:string;onSaved?:()=>void}){
- const [open,setOpen]=useState(false);
- return <><button type="button" className="block text-xs font-medium text-indigo-700 hover:underline" onClick={()=>setOpen(true)}>{label}</button>{open&&<CustomValues entity={entity} id={id} onClose={()=>setOpen(false)} onSaved={onSaved}/>}</>;
-}

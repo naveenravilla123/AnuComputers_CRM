@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCrmUrl } from "@/lib/crm-navigation";
 import { recordSystemFields } from "@/lib/setup-metadata";
 import { objectManagerCatalog } from "@/lib/object-manager-catalog";
 import { fieldLabel } from "@/lib/setup-metadata";
@@ -64,6 +65,7 @@ type Props = {
 const emptyField = { key: "", label: "", type: "TEXT", required: false, options: "", target: "" };
 
 export default function CustomObjects({ settings, standardFields, editableObjects, fieldTypes, onFieldSave, busy: setupBusy }: Props) {
+  const shortcut = useCrmUrl().get("customObject");
   const [objectSection, setObjectSection] = useState<"fields"|"records">("fields");
   const [openRecord, setOpenRecord] = useState("");
   const [standard, setStandard] = useState("");
@@ -76,6 +78,13 @@ export default function CustomObjects({ settings, standardFields, editableObject
   const [standardDraft,setStandardDraft]=useState<{key:string;label:string;required:boolean}|null>(null);
   const [fieldDraft, setFieldDraft] = useState<typeof emptyField | null>(null);
   const [object, setObject] = useState("");
+  useEffect(() => {
+    if (!shortcut || !/^[a-z][a-z0-9_]{0,39}$/.test(shortcut)) return;
+    setStandard("");
+    setOpenRecord("");
+    setObject(shortcut);
+    setObjectSection("records");
+  }, [shortcut]);
   const [revision, setRevision] = useState(0);
   const [definition, setDefinition] = useState({ key: "", name: "", lookup: "" });
   const [keyEdited, setKeyEdited] = useState(false);
@@ -289,7 +298,7 @@ export default function CustomObjects({ settings, standardFields, editableObject
           <button type="button" onClick={() => setOpenRecord("")}>Close Details</button>
         </div>
         <RecordDetails fields={[
-          ...customObjectStandardFields.map(field => ({label:field.label, value:field.storage === "id" ? selectedRecord.id : selectedRecord.record[field.storage]})),
+          ...customObjectStandardFields.filter(field => field.key !== "Id").map(field => ({label:field.label, value:selectedRecord.record[field.storage]})),
           ...(current.definition.lookup ? [{label:"Related record",value:related.records.find(row=>row.id===selectedRecord.record.lookupId)?.record.name ?? selectedRecord.record.lookupId}] : []),
           ...(current.definition.fields ?? []).map(field => ({label:field.label,value:selectedRecord.record.values?.[field.key]})),
         ]}/>

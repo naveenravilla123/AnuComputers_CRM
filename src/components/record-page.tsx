@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { layoutColumns } from "@/lib/record-layout";
 import { fieldLabel } from "@/lib/setup-metadata";
-import { recordFieldsObjects, type RecordPageData } from "@/lib/record-pages";
+import { recordFieldsObjects, recordPageObjects, type RecordPageData } from "@/lib/record-pages";
 import CustomValues from "./custom-values";
 import { useStaffAccess } from "./staff-access-context";
 
-type RecordRef = { entity: string; id: string };
+import { closeCrmRecord, navigateRecordTab, openCrmRecord, useCrmUrl, type RecordRef } from "@/lib/crm-navigation";
 const display = (value: unknown) => value == null || value === "" ? "—"
   : typeof value === "boolean" ? value ? "Yes" : "No"
   : typeof value === "object" ? JSON.stringify(value) : String(value);
@@ -20,12 +20,11 @@ export default function RecordPage({ record, onClose, onEdit }: {
   const access = useStaffAccess();
   const [editingFields, setEditingFields] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [trail, setTrail] = useState<RecordRef[]>([]);
-  const [tab, setTab] = useState("Details");
+  const requestedTab = useCrmUrl().get("tab") ?? "Details";
   const [paging, setPaging] = useState({ list: "", offset: 0 });
   const [data, setData] = useState<RecordPageData | null>(null);
   const [error, setError] = useState("");
-  const current = trail.at(-1) ?? record;
+  const current = record;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,28 +41,15 @@ export default function RecordPage({ record, onClose, onEdit }: {
     return () => controller.abort();
   }, [current.entity, current.id, paging, revision]);
 
-  function resetView() {
-    setTab("Details");
-    setPaging({ list: "", offset: 0 });
-    setData(null);
-  }
-
-  function resetViewAndOpen(next: RecordRef) {
-    resetView();
-    setTrail(previous => [...previous, next]);
-  }
-
-  const editRecord = !trail.length && onEdit
+  const editRecord = onEdit
     ? onEdit
     : recordFieldsObjects.includes(current.entity) && access.can(current.entity, "EDIT")
       ? () => setEditingFields(true)
       : undefined;
-  const selected = data?.tabs.find(item => item.label === tab);
+  const selected = data?.tabs.find(item => item.label === requestedTab);
+  const tab = selected?.label ?? "Details";
   return <section className="space-y-5 rounded-2xl border bg-white p-4 sm:p-6">
-    <button type="button" className="text-sm font-semibold text-indigo-700" onClick={() => {
-      if (!trail.length) onClose();
-      else { resetView(); setTrail(trail.slice(0, -1)); }
-    }}>← Back</button>
+    <button type="button" className="text-sm font-semibold text-indigo-700" onClick={onClose}>← Back</button>
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {!data && !error && <p role="status">Loading record…</p>}
     {data && <>
@@ -72,7 +58,7 @@ export default function RecordPage({ record, onClose, onEdit }: {
           <p className="text-sm text-slate-500">{fieldLabel(current.entity)}</p>
           <h2 className="break-words text-xl font-semibold text-slate-950">{data.title}</h2>
         </div>
-        {editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{!trail.length && onEdit ? "Edit" : "Edit record fields"}</button>}
+        {editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{onEdit ? "Edit" : "Edit record fields"}</button>}
       </header>
       {editingFields && <CustomValues entity={current.entity} id={current.id}
         onClose={() => setEditingFields(false)} onSaved={() => setRevision(value => value + 1)}/>}
@@ -80,14 +66,14 @@ export default function RecordPage({ record, onClose, onEdit }: {
         {["Details", ...data.tabs.map(item => item.label)].map(label => <button type="button" key={label}
           aria-current={tab === label ? "page" : undefined}
           className={tab === label ? "border-b-2 border-indigo-600 px-4 py-2 font-semibold text-indigo-700" : "px-4 py-2 text-slate-600"}
-          onClick={() => { setTab(label); if (paging.offset) setPaging({ list: "", offset: 0 }); }}>{label}</button>)}
+          onClick={() => { navigateRecordTab(label); if (paging.offset) setPaging({ list: "", offset: 0 }); }}>{label}</button>)}
       </nav>
       {!selected && (data.sections.length ? data.sections.map(section => <section key={section.name} className="rounded-xl border p-4">
         <h3 className="mb-3 font-semibold">{section.name}</h3>
         <dl className={layoutColumns(section.columns)}>{section.fields.map((field, index) => <div key={index} className="min-w-0">
           <dt className="text-sm text-slate-500">{field.label}</dt>
           <dd className="break-words text-sm font-medium">{field.lookup
-            ? <button type="button" className="text-indigo-700 hover:underline" onClick={() => resetViewAndOpen(field.lookup!)}>{display(field.value)}</button>
+            ? <button type="button" className="text-indigo-700 hover:underline" onClick={() => openCrmRecord(field.lookup!)}>{display(field.value)}</button>
             : display(field.value)}</dd>
         </div>)}</dl>
       </section>) : <p className="text-sm text-slate-500">No fields are available in this layout.</p>)}
@@ -101,7 +87,7 @@ export default function RecordPage({ record, onClose, onEdit }: {
             <tbody>{list.rows.map(row => <tr key={row.id} className="border-t">
               {list.columns.map(column => <td key={column.key} className="px-4 py-2">{display(row[column.key])}</td>)}
               <td className="px-4 py-2"><button type="button" className="text-indigo-700"
-                onClick={() => { resetView(); setTrail([...trail, { entity: list.target, id: row.id }]); }}>Open</button></td>
+                onClick={() => openCrmRecord({ entity: list.target, id: row.id })}>Open</button></td>
             </tr>)}</tbody>
           </table></div> : <p className="p-4 text-sm text-slate-500">No related records.</p>}
           {(offset > 0 || list.hasMore) && <div className="flex gap-4 px-4 py-3 text-sm">
@@ -115,16 +101,19 @@ export default function RecordPage({ record, onClose, onEdit }: {
 }
 
 
-export function OpenRecordPage({ entity, id }: RecordRef) {
-  const [open, setOpen] = useState(false);
-  return <>
-    <button type="button" className="block text-xs font-medium text-indigo-700 hover:underline" onClick={() => setOpen(true)}>
-      Open record
-    </button>
-    {open && <div className="fixed inset-0 z-[65] overflow-y-auto bg-slate-900/60 p-4 sm:p-8">
-      <div className="mx-auto max-w-6xl" role="dialog" aria-modal="true" aria-label={fieldLabel(entity) + " record"}>
-        <RecordPage record={{ entity, id }} onClose={() => setOpen(false)}/>
-      </div>
-    </div>}
-  </>;
+export function OpenRecordPage({ entity, id, children }: RecordRef & { children?: ReactNode }) {
+  return <button type="button" className="block break-all text-left font-medium text-indigo-700 hover:underline"
+    onClick={() => openCrmRecord({ entity, id })}>{children || "Open record"}</button>;
+}
+
+export function useRoutedRecord(inlineCustomer = false) {
+  const route = useCrmUrl();
+  const entity = route.get("object");
+  const id = route.get("record");
+  if (!entity || !id || !recordPageObjects.includes(entity) || (inlineCustomer && entity === "Customer")) return null;
+  return { entity, id };
+}
+
+export function RoutedRecordPage({ record }: { record: RecordRef }) {
+  return <RecordPage key={record.entity + ":" + record.id} record={record} onClose={closeCrmRecord}/>;
 }

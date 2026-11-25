@@ -1,7 +1,6 @@
 "use client";
 import {useEffect,useState} from "react";
 import MetadataFields,{type Field,type Values} from "./metadata-fields";
-import CustomValues from "./custom-values";
 import {Plus,Pencil,Trash2,Package,X} from "lucide-react";
 import {OpenRecordPage} from "./record-page";
 import {useStaffAccess} from "./staff-access-context";
@@ -30,7 +29,6 @@ export default function LiveProducts({open,onClose}:{open:boolean;onClose:()=>vo
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
  const [revision,setRevision]=useState(0);
- const [customId,setCustomId]=useState("");
  const [metadata,setMetadata]=useState<ProductMetadata|null>(null);
  const [custom,setCustom]=useState<Values>({});
  const [metaError,setMetaError]=useState("");
@@ -116,11 +114,10 @@ export default function LiveProducts({open,onClose}:{open:boolean;onClose:()=>vo
     <td className="px-3 py-2"><div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100">{p.specifications?.image?<img src={p.specifications.image} alt="" className="h-full w-full object-contain" referrerPolicy="no-referrer" loading="lazy"/>:<Package size={20}/>}</div><div><b>{p.name}</b><p className="text-xs text-slate-500">{p.brand}</p></div></div></td>
     <td className="px-3 py-2">{p.sku}</td><td className="px-3 py-2">{p.category}</td><td className="px-3 py-2 tabular-nums">₹{Number(p.price).toLocaleString("en-IN")}</td><td className="px-3 py-2">{p.stocks.reduce((n,s)=>n+s.qty-s.reserved,0)}</td>
     <td className="px-3 py-2"><span className={p.active?"text-emerald-700":"text-slate-500"}>{p.active?"Active":"Inactive"}</span></td>
-    <td className="px-3 py-2"><div className="flex gap-3"><OpenRecordPage entity="Product" id={p.id}/>{staff.can("Product","EDIT")&&<button type="button" className="text-indigo-700 text-sm" onClick={()=>setCustomId(p.id)}>Custom fields</button>}{canEdit&&<button disabled={busy} aria-label="Edit product" onClick={()=>{setForm({id:p.id,name:p.name||"",sku:p.sku||"",category:p.category||"",brand:p.brand||"",price:String(p.price??""),cost:String(p.cost??""),image:p.specifications?.image||"",description:p.specifications?.description||"",active:p.active??true});setEditing(true);setError("")}}><Pencil size={18}/></button>}{canDelete&&<button disabled={busy} aria-label="Delete product" className="text-red-600" onClick={()=>remove(p.id)}><Trash2 size={18}/></button>}</div></td>
+    <td className="px-3 py-2"><div className="flex gap-3"><OpenRecordPage entity="Product" id={p.id}/>{canEdit&&<button disabled={busy} aria-label="Edit product" onClick={()=>{setForm({id:p.id,name:p.name||"",sku:p.sku||"",category:p.category||"",brand:p.brand||"",price:String(p.price??""),cost:String(p.cost??""),image:p.specifications?.image||"",description:p.specifications?.description||"",active:p.active??true});setEditing(true);setError("")}}><Pencil size={18}/></button>}{canDelete&&<button disabled={busy} aria-label="Delete product" className="text-red-600" onClick={()=>remove(p.id)}><Trash2 size={18}/></button>}</div></td>
    </tr>)}</tbody>
   </table></div>
   {!filtered.length&&<p className="rounded-xl bg-white p-10 text-center text-slate-500">{busy?"Loading products…":"No products found. Add your first product."}</p>}
-  {customId&&<CustomValues key={customId} entity="Product" id={customId} onClose={()=>setCustomId("")} onSaved={()=>setRevision(v=>v+1)}/>}
   {editing&&<div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/60 p-4"><form onSubmit={e=>{e.preventDefault();save()}} className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-6">
    <div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">{form.id?"Edit":"New"} product</h2><button type="button" onClick={()=>setEditing(false)}><X/></button></div>
    {metadata&&<MetadataFields fields={productFormFields} sections={metadata.sections} values={{...form,...custom}} onChange={(key,value)=>{

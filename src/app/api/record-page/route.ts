@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     const labels = new Map(fields.map(field => [field.key, field.label]));
     const custom = values?.value;
-    const systemFields = recordSystemFields.filter(field => canRead(entity, field.key));
+    const systemFields = recordSystemFields.filter(field => field.key !== "id" && canRead(entity, field.key));
     const auditDetails = await resolveRecordAudit(prisma, audit?.value, field => canRead(entity, field));
     const available = {
       ...record,

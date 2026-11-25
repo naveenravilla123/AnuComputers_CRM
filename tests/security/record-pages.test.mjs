@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { runInThisContext } from "node:vm";
+import { runInNewContext, runInThisContext } from "node:vm";
 import ts from "typescript";
 
 function load(path, requireModule = name => { throw Error("Unexpected import " + name); }) {
@@ -23,7 +23,7 @@ const auditDetails = load("src/lib/record-audit-details.ts");
 test("Customer 360 uses assigned sections and returns only authorized related fields", async () => {
   const requests = [];
   const permissions = ["Customer:READ", "SalesOrder:READ", "Quote:READ"];
-  const fieldPermissions = ["Customer:name:READ", "Customer:createdAt:READ", "Customer:lastModifiedBy:READ", "SalesOrder:number:READ", "Quote:number:READ"];
+  const fieldPermissions = ["Customer:name:READ", "Customer:id:READ", "Customer:createdAt:READ", "Customer:lastModifiedBy:READ", "SalesOrder:number:READ", "Quote:number:READ"];
   const prisma = {
     staff: { findMany: async ({ where }) => {
       assert.deepEqual(where.id.in, ["sales-user"]);
@@ -58,7 +58,7 @@ test("Customer 360 uses assigned sections and returns only authorized related fi
     }) },
     "@/lib/effective-layout": { effectiveLayout: async (...args) => {
       assert.deepEqual(args.slice(3), ["SALES", "custom.sales"]);
-      return [{ name: "Assigned details", columns: 2, fields: ["name", "phone", "private_notes"] }];
+      return [{ name: "Assigned details", columns: 2, fields: ["name", "id", "phone", "private_notes"] }];
     } },
     "@/lib/record-pages": catalog,
     "@/lib/record-layout": recordLayout,
@@ -99,4 +99,80 @@ test("all standard record pages offer every cataloged scalar field and audit fie
       assert.ok(placed.includes(key), entity + "." + key);
     }
   }
+});
+
+
+test("CRM URLs preserve selected modules, Setup sections, and nested record tabs", () => {
+  const path = new URL("https://crm.example/staff");
+  const events = new EventTarget();
+  const entries = [{ url: path.href, state: null }];
+  let index = 0;
+  const history = {
+    get state() { return entries[index].state; },
+    pushState(state, _title, url) {
+      entries.splice(++index, entries.length, { url: url.href, state });
+    },
+    back() { index--; events.dispatchEvent(new Event("popstate")); },
+  };
+  const window = {
+    history, get location() { return new URL(entries[index].url); },
+    dispatchEvent: events.dispatchEvent.bind(events),
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+  };
+  const source = readFileSync(new URL("../../src/lib/crm-navigation.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
+  } }).outputText;
+  const navigation = {};
+  let notifications = 0;
+  const react = { useSyncExternalStore(subscribe, snapshot) {
+    subscribe(() => notifications++);
+    return snapshot();
+  } };
+  runInNewContext(compiled, { exports: navigation, require: () => react, window, URL, URLSearchParams, Event });
+  navigation.useCrmUrl();
+  navigation.navigateModule("Customers");
+  navigation.openCrmRecord({ entity: "Customer", id: "customer" });
+  navigation.navigateRecordTab("Sales & orders");
+  navigation.openCrmRecord({ entity: "SalesOrder", id: "order" });
+  assert.equal(window.location.pathname, "/staff");
+  assert.equal(window.location.searchParams.get("module"), "Customers");
+  assert.equal(window.location.searchParams.get("record"), "order");
+  assert.equal(window.location.searchParams.get("tab"), null);
+  history.back();
+  assert.equal(window.location.searchParams.get("tab"), "Sales & orders");
+  navigation.openCrmRecord({ entity: "SalesOrder", id: "order" });
+  navigation.closeCrmRecord();
+  assert.equal(window.location.searchParams.get("record"), "customer");
+  assert.equal(window.location.searchParams.get("tab"), "Sales & orders");
+  navigation.closeCrmRecord();
+  assert.equal(window.location.search, "?module=Customers");
+  navigation.navigateModule("CRM Setup");
+  navigation.navigateSetup("Record Pages");
+  assert.equal(window.location.searchParams.get("setup"), "Record Pages");
+  assert.ok(notifications >= 9);
+});
+
+
+test("workspace navigation supports moving and hiding items without adding unauthorized modules", () => {
+  const { arrangeNavigation, defaultNavigation, parseNavigation } = load("src/lib/workspace-navigation.ts");
+  const catalog = [...defaultNavigation, { id: "custom:qa__c", label: "QA object", group: "My Work", visible: false }];
+  const layout = parseNavigation([
+    { id: "Sales Orders", group: "My Work", visible: true },
+    { id: "Products", group: "My Work", visible: true },
+    { id: "Customers", group: "Sales", visible: false },
+    { id: "custom:qa__c", group: "Sales", visible: true },
+  ], catalog);
+  const permitted = [
+    { id: "Customers", group: "Sales" },
+    { id: "Products", group: "Inventory" },
+    { id: "Sales Orders", group: "Sales" },
+  ];
+  assert.deepEqual(arrangeNavigation(permitted, layout), [{
+    group: "My Work", entries: [{ id: "Sales Orders", group: "My Work" }, { id: "Products", group: "My Work" }],
+  }]);
+  assert.equal(layout.find(item => item.id === "custom:qa__c").label, "QA object");
+  assert.equal(parseNavigation([{ id: "CRM Setup", group: "Overview", visible: false }]), null);
+  assert.equal(parseNavigation([defaultNavigation[0], defaultNavigation[0]]), null);
 });

@@ -2,10 +2,11 @@
 
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {
-  Boxes,BriefcaseBusiness,ClipboardList,FileText,Headphones,LogOut,Package,RefreshCw,
+  Home,Boxes,BriefcaseBusiness,ClipboardList,FileText,Headphones,LogOut,Package,RefreshCw,
   MessageSquare,ReceiptText,ShieldCheck,ShoppingCart,Truck,Users,Wrench,UserRoundPlus,Wallet,
   type LucideIcon,
 } from "lucide-react";
+import Attention from "@/components/attention";
 import Customers from "@/components/customers";
 import LiveProducts from "@/components/live-products";
 import LiveInventory from "@/components/live-inventory";
@@ -13,14 +14,18 @@ import LivePurchases from "@/components/live-purchases";
 import LiveLeads from "@/components/live-leads";
 import LiveQuotes from "@/components/live-quotes";
 import LiveOrders from "@/components/live-orders";
-import LiveBilling from "@/components/live-billing";
+import LiveBilling, {canUseCheckout} from "@/components/live-billing";
 import LiveRepairs from "@/components/live-repairs";
 import LiveServiceAdmin from "@/components/live-service-admin";
 import LiveAfterSales from "@/components/live-after-sales";
 import LiveReports from "@/components/live-reports";
 import {layoutColumns} from "@/lib/record-layout";
 import {STAFF_WORKSPACE_HEADER} from "@/lib/staff-request-context";
-import {StaffAccessProvider} from "@/components/staff-access-context";
+import {arrangeNavigation,isStandaloneGroup} from "@/lib/workspace-navigation";
+import {useWorkspaceNavigation,workspaceNavigationChanged} from "@/components/use-workspace-navigation";
+import {navigateModule,useCrmUrl} from "@/lib/crm-navigation";
+import {RoutedRecordPage,useRoutedRecord} from "@/components/record-page";
+import {staffAccessRules,StaffAccessProvider} from "@/components/staff-access-context";
 
 declare global {
   interface Window {
@@ -42,7 +47,7 @@ if (typeof window !== "undefined" && window.location.pathname === "/staff" && !w
 
 type User={id:string;name:string;email:string;role:string;permissions:string[];fieldPermissions:string[];profileId?:string};
 type Job={id:string;sections:{name:string;columns:number;fields:{key:string;label:string;value:unknown}[]}[];case:{issue:string|null;priority:string|null;asset:{brand:string|null;model:string|null;serialNumber?:string|null}|null}};
-type Module={id:string;group:string;icon:LucideIcon;grants:string[];fields?:string[];technicianOnly?:boolean};
+type Module={id:string;label?:string;group:string;icon:LucideIcon;grants:string[];fields?:string[];technicianOnly?:boolean};
 const fields=(entity:string,...keys:string[])=>keys.map(key=>entity+":"+key+":READ");
 
 const modules:Module[]=[
@@ -63,23 +68,39 @@ const modules:Module[]=[
   {id:"Communications",group:"Sales",icon:MessageSquare,grants:["Communication:READ","Customer:READ"],fields:[...fields("Communication","channel","recipient","template","status","externalId","createdAt"),...fields("Customer","phone")]},
   {id:"Reports",group:"Finance",icon:BriefcaseBusiness,grants:["Invoice:READ","Payment:READ","Stock:READ","Product:READ","Branch:READ","ServiceCase:READ","Staff:READ","JobCard:READ","Warranty:READ","Asset:READ","Customer:READ","Communication:READ"],fields:[...fields("Invoice","number","total","status","createdAt","orderId","caseId","customerId"),...fields("Payment","amount","paidAt"),...fields("Stock","qty","reserved","reorderPoint"),...fields("Product","name","sku"),...fields("Branch","name"),...fields("ServiceCase","status","createdAt"),...fields("Staff","name","active"),...fields("JobCard","status","technicianId"),...fields("Warranty","startDate","endDate"),...fields("Asset","brand","model","serialNumber"),...fields("Customer","name"),...fields("Communication","channel","recipient","template","status","externalId","createdAt")]},
 ];
-const groups=["My Work","Sales","Inventory","Purchasing","Service","Finance"];
+const homeModule:Module={id:"Dashboard",group:"Home",icon:Home,grants:[]};
+const invoiceModule=modules.find(module=>module.id==="Invoices")!;
+modules.push({...invoiceModule,id:"POS Billing",icon:ShoppingCart});
 const input="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 const button="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function StaffPortal(){
   const [user,setUser]=useState<User|null>(null),[jobs,setJobs]=useState<Job[]>([]);
   const [email,setEmail]=useState(""),[password,setPassword]=useState("");
-  const [error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false),[active,setActive]=useState("");
-  const available=useMemo(()=>user?modules.filter(module=>
+  const [error,setError]=useState(""),[busy,setBusy]=useState(false),[ready,setReady]=useState(false);
+  const requestedModule=useCrmUrl().get("module");
+  const available=useMemo(()=>user?[homeModule,...modules].filter(module=>
     (!module.technicianOnly||user.role==="TECHNICIAN")&&module.grants.every(grant=>user.permissions.includes(grant))&&
     (module.fields||[]).every(grant=>user.fieldPermissions.includes(grant))
   ):[],[user]);
 
+  const navigation=useWorkspaceNavigation(!!user);
+  const sidebar=arrangeNavigation(available,navigation);
+  const [expanded,setExpanded]=useState<Record<string,boolean>>({});
+  const active=available.find(module=>module.id===requestedModule)?.id??
+    (available.some(module=>module.id==="My Jobs")?"My Jobs":"Dashboard");
+  const canBook=available.some(module=>module.id==="Service Cases") &&
+    user?.permissions.includes("ServiceCase:CREATE") && user.permissions.includes("Asset:CREATE") && user.permissions.includes("JobCard:CREATE");
+  const canSell=available.some(module=>module.id==="POS Billing") &&
+    !!user && canUseCheckout(staffAccessRules(user));
+  const [bookRepair,setBookRepair]=useState(false);
+  const [attention,setAttention]=useState("");
+  const routedRecord=useRoutedRecord(active==="Customers");
+
   const load=useCallback(async()=>{
     setError("");
     const response=await fetch("/api/staff-auth",{cache:"no-store"});
-    if(!response.ok){setUser(null);setJobs([]);setActive("");return}
+    if(!response.ok){setUser(null);setJobs([]);return}
     const current:User=await response.json();
     setUser(current);
     if(current.role==="TECHNICIAN"&&current.permissions.includes("JobCard:READ")){
@@ -90,9 +111,6 @@ export default function StaffPortal(){
   },[]);
 
   useEffect(()=>{load().catch(()=>setError("Unable to load your staff workspace")).finally(()=>setReady(true))},[load]);
-  useEffect(()=>{
-    if(!available.some(module=>module.id===active))setActive(available[0]?.id||"");
-  },[available,active]);
 
   async function authenticate(action:"login"|"logout"){
     setBusy(true);setError("");
@@ -101,7 +119,7 @@ export default function StaffPortal(){
       const result=await response.json();
       if(!response.ok)throw Error(result.error||"Unable to authenticate");
       setPassword("");
-      if(action==="logout"){setUser(null);setJobs([]);setActive("")}
+      if(action==="logout"){setUser(null);setJobs([])}
       else await load();
     }catch(cause){setError(cause instanceof Error?cause.message:"Request failed")}
     finally{setBusy(false)}
@@ -111,6 +129,16 @@ export default function StaffPortal(){
     if (!available.some(module => module.id === active)) return null;
     const staffAccess={permissions:user?.permissions??[],fieldPermissions:user?.fieldPermissions??[]};
     switch(active){
+      case "Dashboard":return <div className="space-y-4"><section className="space-y-4 rounded-2xl border bg-white p-5">
+        <h2 className="text-lg font-semibold">Start work</h2>
+        <div className="flex flex-wrap gap-3">
+          {canSell&&<button className={button} onClick={()=>navigateModule("POS Billing")}>New Sale</button>}
+          {canBook&&<button className={button} onClick={()=>{setBookRepair(true);navigateModule("Service Cases")}}>Book Repair</button>}
+          {available.filter(module=>["Customers","Invoices","Inventory","Reports"].includes(module.id)).map(module=>
+            <button key={module.id} className="rounded-xl border px-4 py-2.5 text-sm" onClick={()=>navigateModule(module.id)}>{module.id}</button>)}
+        </div>
+      </section><Attention selected={attention} onSelect={setAttention} onModule={navigateModule}
+        allowedModules={available.map(module=>module.id)}/></div>;
       case "My Jobs":return <MyJobs jobs={jobs}/>;
       case "Customers":return <Customers open={false} onClose={()=>{}} staffAccess={staffAccess}/>;
       case "Enquiries":return <LiveLeads mode="Enquiries" staffAccess={staffAccess}/>;
@@ -119,8 +147,8 @@ export default function StaffPortal(){
       case "Suppliers":return <LivePurchases mode="Suppliers"/>;
       case "Quotations":return <LiveQuotes/>;
       case "Sales Orders":return <LiveOrders/>;
-      case "Invoices":case "Payments":return <LiveBilling mode={active}/>;
-      case "Service Cases":case "Job Cards":return <LiveRepairs mode={active}/>;
+      case "POS Billing":case "Invoices":case "Payments":return <LiveBilling key={active} mode={active}/>;
+      case "Service Cases":case "Job Cards":return <LiveRepairs key={active} mode={active} initialIntake={bookRepair}/>;
       case "Warranties":return <LiveServiceAdmin mode="Warranties"/>;
       case "After Sales":return <LiveAfterSales/>;
       case "Reports":return <LiveReports mode="Reports"/>;
@@ -148,12 +176,11 @@ export default function StaffPortal(){
     <aside className="flex w-full shrink-0 flex-col border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r">
       <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5"><div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-600 text-white"><BriefcaseBusiness size={20}/></div><div><p className="font-bold">Anu Computers</p><p className="text-xs text-slate-500">Staff workspace</p></div></div>
       <nav aria-label="CRM modules" className="flex gap-1 overflow-x-auto p-3 lg:flex-1 lg:flex-col lg:overflow-y-auto">
-        {groups.map(group=>{
-          const entries=available.filter(module=>module.group===group);
-          if(!entries.length)return null;
+        {sidebar.map(({group,entries})=>{
           return <div key={group} className="lg:mb-5">
-            <p className="hidden px-3 pb-2 pt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 lg:block">{group}</p>
-            <div className="flex gap-1 lg:flex-col">{entries.map(module=>{const Icon=module.icon;return <button key={module.id} aria-current={active===module.id?"page":undefined} onClick={()=>setActive(module.id)} className={"flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition "+(active===module.id?"bg-indigo-50 text-indigo-700":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span>{module.id}</span></button>})}</div>
+            {!isStandaloneGroup(group,entries.length)&&<button type="button" aria-expanded={expanded[group]??entries.some(module=>module.id===active)}
+              className="px-3 py-2.5 text-left text-sm font-semibold" onClick={()=>setExpanded(previous=>({...previous,[group]:!(previous[group]??entries.some(module=>module.id===active))}))}>{group}</button>}
+            {(isStandaloneGroup(group,entries.length)||(expanded[group]??entries.some(module=>module.id===active)))&&<div className="flex gap-1 lg:flex-col">{entries.map(module=>{const Icon=module.icon;return <button key={module.id} aria-current={active===module.id?"page":undefined} onClick={()=>{setBookRepair(false);navigateModule(module.id)}} className={"flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition "+(active===module.id?"bg-indigo-50 text-indigo-700":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span>{module.label??module.id}</span></button>})}</div>}
           </div>;
         })}
       </nav>
@@ -161,12 +188,12 @@ export default function StaffPortal(){
     </aside>
     <section className="min-w-0 flex-1">
       <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-7">
-        <div><p className="text-xs font-medium text-indigo-600">{user.profileId?"Assigned custom profile":"Role profile"} · {user.role}</p><h1 className="text-lg font-bold">{active||"Your workspace"}</h1></div>
-        <div className="flex items-center gap-2"><button onClick={()=>load().catch(()=>setError("Refresh failed"))} className="rounded-xl border border-slate-200 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Refresh workspace"><RefreshCw size={17}/></button><button onClick={()=>authenticate("logout")} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 lg:hidden"><LogOut size={16}/>Sign out</button></div>
+        <div><p className="text-xs font-medium text-indigo-600">{user.profileId?"Assigned custom profile":"Role profile"} · {user.role}</p><h1 className="text-lg font-bold">{active==="Dashboard"?"Home":active}</h1></div>
+        <div className="flex items-center gap-2"><button onClick={()=>{window.dispatchEvent(new Event(workspaceNavigationChanged));load().catch(()=>setError("Refresh failed"))}} className="rounded-xl border border-slate-200 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Refresh workspace"><RefreshCw size={17}/></button><button onClick={()=>authenticate("logout")} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 lg:hidden"><LogOut size={16}/>Sign out</button></div>
       </header>
       <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-7">
         {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-        {!available.length?<section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-lg font-semibold">No modules assigned yet</h2><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">Your account is active, but its role profile, custom profile, or permission sets do not currently grant access to an operational module. Contact your CRM administrator to configure access in Setup.</p><p className="mt-4 text-xs text-slate-400">Administrator-only Setup and staff account tools are not available in the staff workspace.</p></section>:<>{active&&<StaffAccessProvider key={JSON.stringify([user.id, user.permissions, user.fieldPermissions])} access={user}>{renderModule()}</StaffAccessProvider>}</>}
+        {!active?<section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-lg font-semibold">No modules assigned yet</h2><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">Your account is active, but its role profile, custom profile, or permission sets do not currently grant access to an operational module. Contact your CRM administrator to configure access in Setup.</p><p className="mt-4 text-xs text-slate-400">Administrator-only Setup and staff account tools are not available in the staff workspace.</p></section>:<>{active&&<StaffAccessProvider key={JSON.stringify([user.id, user.permissions, user.fieldPermissions])} access={user}>{routedRecord&&<RoutedRecordPage record={routedRecord}/>}<div hidden={!!routedRecord}>{renderModule()}</div></StaffAccessProvider>}</>}
       </div>
     </section>
   </main>;
