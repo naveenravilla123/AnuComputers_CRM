@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import MetadataFields, { type Field, type Values } from "./metadata-fields";
-import { openCrmRecord } from "@/lib/crm-navigation";
+import RecordPage from "./record-page";
+import { closeCrmRecord, openCrmRecord, useCrmUrl } from "@/lib/crm-navigation";
 import { recordSections } from "@/lib/metadata-runtime";
 import { SalesTable, SalesFilters, SalesStatus, statusLabel } from "./sales-table";
 import { canEditStaffField, canReadStaffField, type StaffAccess } from "@/lib/staff-field-access";
@@ -46,6 +47,9 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
     ["name", "phone", "source"].every(key => canEditStaffField(staffAccess, "Customer", key)) &&
     canReadStaffField(staffAccess, "Customer", "phone"));
   const formId = form?.id;
+  const route = useCrmUrl();
+  const recordId = route.get("object") === "Lead" ? route.get("record") : null;
+  const current = rows.find(row => row.id === recordId);
   const isBoard = mode === "Opportunities";
 
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
       });
       const result = await response.json();
       if (!response.ok) throw Error(result.error);
+      if (form && !form.id && result.id) openCrmRecord({ entity: "Lead", id: result.id });
       setForm(null);
       setRevision(value => value + 1);
     } catch (error) {
@@ -138,9 +143,9 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
     </button>;
   }
 
-  function actions(row: Lead) {
+  function actions(row: Lead, onRecord = false) {
     return <div className="flex flex-wrap gap-3 text-sm">
-      {canEditLead && <button type="button" className="text-indigo-700" onClick={() => openForm(row)}>Edit</button>}
+      {!onRecord && canEditLead && <button type="button" className="text-indigo-700" onClick={() => openForm(row)}>Edit</button>}
       {canRead("customerId") && row.customerId
         ? <span className="text-emerald-700">Customer linked</span>
         : canConvert && <button type="button" className="text-indigo-700 disabled:text-slate-400"
@@ -151,7 +156,12 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
     </div>;
   }
 
-  return <section className="space-y-4 rounded-2xl border bg-white p-4 sm:p-5">
+  return <>
+    {recordId && <RecordPage key={recordId} record={{ entity: "Lead", id: recordId }} onClose={closeCrmRecord}
+      customEdit={false} revision={revision} onEdit={current && canEditLead ? () => openForm(current) : undefined}
+      actions={current ? actions(current, true) : undefined}/>}
+    {recordId && !form && error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-700">{error}</p>}
+    <section hidden={!!recordId} className="space-y-4 rounded-2xl border bg-white p-4 sm:p-5">
     <div className="flex items-center justify-between gap-3">
       <h2 className="text-lg font-semibold">{mode}</h2>
       {canCreateLead && <button type="button" className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white"
@@ -175,6 +185,7 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
         {showActions && <td>{actions(row)}</td>}
       </tr>)}
     </SalesTable>}
+    </section>
     {form && <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/60 p-4">
       <form role="dialog" aria-modal="true" aria-label={form.id ? "Edit enquiry" : "New enquiry"}
         className="max-h-[90vh] w-full max-w-3xl space-y-4 overflow-auto rounded-2xl bg-white p-6"
@@ -197,5 +208,5 @@ export default function LiveLeads({ mode, staffAccess }: { mode: string; staffAc
         </div>
       </form>
     </div>}
-  </section>;
+  </>;
 }

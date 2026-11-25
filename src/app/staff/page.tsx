@@ -95,7 +95,7 @@ export default function StaffPortal(){
     !!user && canUseCheckout(staffAccessRules(user));
   const [bookRepair,setBookRepair]=useState(false);
   const [attention,setAttention]=useState("");
-  const routedRecord=useRoutedRecord(active==="Customers");
+  const routedRecord=useRoutedRecord(active==="Customers"?"Customer":active==="Enquiries"||active==="Opportunities"?"Lead":undefined);
 
   const load=useCallback(async()=>{
     setError("");

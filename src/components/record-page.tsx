@@ -12,10 +12,13 @@ const display = (value: unknown) => value == null || value === "" ? "—"
   : typeof value === "boolean" ? value ? "Yes" : "No"
   : typeof value === "object" ? JSON.stringify(value) : String(value);
 
-export default function RecordPage({ record, onClose, onEdit }: {
+export default function RecordPage({ record, onClose, onEdit, actions, revision: externalRevision = 0, customEdit = true }: {
   record: RecordRef;
   onClose: () => void;
   onEdit?: () => void;
+  actions?: ReactNode;
+  revision?: number;
+  customEdit?: boolean;
 }) {
   const access = useStaffAccess();
   const [editingFields, setEditingFields] = useState(false);
@@ -39,11 +42,11 @@ export default function RecordPage({ record, onClose, onEdit }: {
       })
       .catch(error => { if (!controller.signal.aborted) setError(error.message); });
     return () => controller.abort();
-  }, [current.entity, current.id, paging, revision]);
+  }, [current.entity, current.id, paging, revision, externalRevision]);
 
   const editRecord = onEdit
     ? onEdit
-    : recordFieldsObjects.includes(current.entity) && access.can(current.entity, "EDIT")
+    : customEdit && recordFieldsObjects.includes(current.entity) && access.can(current.entity, "EDIT")
       ? () => setEditingFields(true)
       : undefined;
   const selected = data?.tabs.find(item => item.label === requestedTab);
@@ -58,7 +61,7 @@ export default function RecordPage({ record, onClose, onEdit }: {
           <p className="text-sm text-slate-500">{fieldLabel(current.entity)}</p>
           <h2 className="break-words text-xl font-semibold text-slate-950">{data.title}</h2>
         </div>
-        {editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{onEdit ? "Edit" : "Edit record fields"}</button>}
+        <div className="flex flex-wrap items-center gap-2">{actions}{editRecord && <button type="button" className="rounded-lg border bg-white px-4 py-2" onClick={editRecord}>{onEdit ? "Edit" : "Edit record fields"}</button>}</div>
       </header>
       {editingFields && <CustomValues entity={current.entity} id={current.id}
         onClose={() => setEditingFields(false)} onSaved={() => setRevision(value => value + 1)}/>}
@@ -83,11 +86,9 @@ export default function RecordPage({ record, onClose, onEdit }: {
           <h3 className="border-b bg-slate-50 px-4 py-3 font-semibold">{list.label}</h3>
           {list.rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm">
             <thead><tr>{list.columns.map(column => <th key={column.key} scope="col" className="px-4 py-2">{column.label}</th>)}
-              <th scope="col" className="px-4 py-2">Record</th></tr></thead>
+              </tr></thead>
             <tbody>{list.rows.map(row => <tr key={row.id} className="border-t">
-              {list.columns.map(column => <td key={column.key} className="px-4 py-2">{display(row[column.key])}</td>)}
-              <td className="px-4 py-2"><button type="button" className="text-indigo-700"
-                onClick={() => openCrmRecord({ entity: list.target, id: row.id })}>Open</button></td>
+              {list.columns.map((column, index) => <td key={column.key} className="px-4 py-2">{index === 0 ? <button type="button" className="font-medium text-indigo-700 hover:underline" onClick={() => openCrmRecord({ entity: list.target, id: row.id })}>{display(row[column.key]) === "—" ? "Open record" : display(row[column.key])}</button> : display(row[column.key])}</td>)}
             </tr>)}</tbody>
           </table></div> : <p className="p-4 text-sm text-slate-500">No related records.</p>}
           {(offset > 0 || list.hasMore) && <div className="flex gap-4 px-4 py-3 text-sm">
@@ -106,11 +107,11 @@ export function OpenRecordPage({ entity, id, children }: RecordRef & { children?
     onClick={() => openCrmRecord({ entity, id })}>{children || "Open record"}</button>;
 }
 
-export function useRoutedRecord(inlineCustomer = false) {
+export function useRoutedRecord(inlineEntity?: string) {
   const route = useCrmUrl();
   const entity = route.get("object");
   const id = route.get("record");
-  if (!entity || !id || !recordPageObjects.includes(entity) || (inlineCustomer && entity === "Customer")) return null;
+  if (!entity || !id || !recordPageObjects.includes(entity) || entity === inlineEntity) return null;
   return { entity, id };
 }
 

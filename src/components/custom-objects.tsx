@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useCrmUrl } from "@/lib/crm-navigation";
+import { navigateSetup, useCrmUrl } from "@/lib/crm-navigation";
 import { recordSystemFields } from "@/lib/setup-metadata";
 import { objectManagerCatalog } from "@/lib/object-manager-catalog";
 import { fieldLabel } from "@/lib/setup-metadata";
 
+import { workspaceNavigationChanged } from "./use-workspace-navigation";
 import StandardRecords, { RecordDetails } from "./standard-records";
 import MetadataFields from "./metadata-fields";
 import CustomLookup from "./custom-lookup";
@@ -79,10 +80,17 @@ export default function CustomObjects({ settings, standardFields, editableObject
   const [fieldDraft, setFieldDraft] = useState<typeof emptyField | null>(null);
   const [object, setObject] = useState("");
   useEffect(() => {
-    if (!shortcut || !/^[a-z][a-z0-9_]{0,39}$/.test(shortcut)) return;
-    setStandard("");
+    if (!shortcut) return;
+    const standardKey = shortcut.startsWith("standard:") ? shortcut.slice(9) : "";
+    const customKey = shortcut.startsWith("custom:") ? shortcut.slice(7) : shortcut;
+    if (standardKey && Object.prototype.hasOwnProperty.call(objectManagerCatalog, standardKey)) {
+      setStandard(standardKey);
+      setObject("");
+    } else if (/^[a-z][a-z0-9_]{0,39}$/.test(customKey)) {
+      setStandard("");
+      setObject(customKey);
+    } else return;
     setOpenRecord("");
-    setObject(shortcut);
     setObjectSection("records");
   }, [shortcut]);
   const [revision, setRevision] = useState(0);
@@ -97,7 +105,7 @@ export default function CustomObjects({ settings, standardFields, editableObject
   const related = useRecords(current?.definition.lookup ?? "", revision);
   const resetRecord = () => setDraft({ name: "", lookupId: "", values: {} });
 
-  async function save(payload: object) {
+  async function save(payload: { action: string; [key: string]: unknown }) {
     setBusy(true);
     setError("");
     try {
@@ -113,7 +121,13 @@ export default function CustomObjects({ settings, standardFields, editableObject
         setDefinition({ key: "", name: "", lookup: "" });
         setKeyEdited(false);
       }
-      if(result.deleted)setObject("");
+      if(result.deleted) {
+        setObject("");
+        if (shortcut) navigateSetup("Object Manager");
+      }
+      if (["define", "rename", "deleteObject"].includes(payload.action)) {
+        window.dispatchEvent(new Event(workspaceNavigationChanged));
+      }
       setRenameLabel(null);
       resetRecord();
       setFieldDraft(null);
@@ -162,7 +176,7 @@ export default function CustomObjects({ settings, standardFields, editableObject
       </table>
     </>}
     {(standard || current || newObject) && <button type="button" className="text-indigo-700 hover:underline" disabled={busy || setupBusy}
-      onClick={() => { setStandard("");setObject("");setNewObject(false);setFieldDraft(null);setRenameLabel(null);setOpenRecord("");resetRecord(); }}>← All Objects</button>}
+      onClick={() => { if (shortcut) navigateSetup("Object Manager");setStandard("");setObject("");setNewObject(false);setFieldDraft(null);setRenameLabel(null);setOpenRecord("");resetRecord(); }}>← All Objects</button>}
     {(standard || current) && <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xl font-semibold">{standard ? fieldLabel(standard) : current?.definition.name}</h3>
@@ -299,7 +313,7 @@ export default function CustomObjects({ settings, standardFields, editableObject
         </div>
         <RecordDetails fields={[
           ...customObjectStandardFields.filter(field => field.key !== "Id").map(field => ({label:field.label, value:selectedRecord.record[field.storage]})),
-          ...(current.definition.lookup ? [{label:"Related record",value:related.records.find(row=>row.id===selectedRecord.record.lookupId)?.record.name ?? selectedRecord.record.lookupId}] : []),
+          ...(current.definition.lookup ? [{label:"Related record",value:related.records.find(row=>row.id===selectedRecord.record.lookupId)?.record.name ?? (selectedRecord.record.lookupId ? "Related record unavailable" : null)}] : []),
           ...(current.definition.fields ?? []).map(field => ({label:field.label,value:selectedRecord.record.values?.[field.key]})),
         ]}/>
         <RelatedLists object={object} id={selectedRecord.id} revision={revision}/>

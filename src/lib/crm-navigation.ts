@@ -38,7 +38,7 @@ export function navigateSetup(section: string) {
   writeCrmUrl({ setup: section, customObject: null, object: null, record: null, tab: null });
 }
 
-export function openCustomObject(object: string) {
+export function openObjectRecords(object: string) {
   writeCrmUrl({ module: "CRM Setup", setup: "Object Manager", customObject: object, object: null, record: null, tab: null });
 }
 

@@ -151,6 +151,13 @@ test("CRM URLs preserve selected modules, Setup sections, and nested record tabs
   navigation.navigateModule("CRM Setup");
   navigation.navigateSetup("Record Pages");
   assert.equal(window.location.searchParams.get("setup"), "Record Pages");
+  navigation.openObjectRecords("standard:Branch");
+  assert.equal(window.location.searchParams.get("setup"), "Object Manager");
+  assert.equal(window.location.searchParams.get("customObject"), "standard:Branch");
+  navigation.openObjectRecords("custom:qa__c");
+  assert.equal(window.location.searchParams.get("customObject"), "custom:qa__c");
+  navigation.navigateSetup("Workspace Navigation");
+  assert.equal(window.location.searchParams.get("customObject"), null);
   assert.ok(notifications >= 9);
 });
 

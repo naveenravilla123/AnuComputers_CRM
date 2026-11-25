@@ -7,6 +7,7 @@ import { workspaceNavigationChanged } from "./use-workspace-navigation";
 export default function WorkspaceNavigationSetup() {
   const [items, setItems] = useState<NavigationItem[] | null>(null);
   const [defaults, setDefaults] = useState(defaultNavigation);
+  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
@@ -50,13 +51,14 @@ export default function WorkspaceNavigationSetup() {
   }
 
   return <section className="space-y-4 rounded-xl border bg-white p-4">
-    <p className="text-sm text-slate-600">Choose which modules appear in the sidebar, move them between groups, and change their order. Object access is controlled in Profiles and Permission Sets.</p>
+    <p className="text-sm text-slate-600">Show or remove sidebar shortcuts, choose their group, and set their order. Standard and custom object record shortcuts open in the admin workspace.</p>
     <fieldset disabled={!items || busy} className="space-y-4">
-      <ul className="divide-y rounded-lg border">{items?.map((item, index) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+      <label className="block text-sm font-medium">Find modules and objects<input type="search" className="mt-1 block w-full max-w-sm rounded border px-3 py-2" value={search} onChange={event => setSearch(event.target.value)}/></label>
+      <ul className="divide-y rounded-lg border">{items?.map((item, index) => (item.label ?? item.id).toLowerCase().includes(search.trim().toLowerCase()) && <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
         <label className="flex min-w-44 items-center gap-2 text-sm font-medium">
           <input type="checkbox" aria-label={"Show " + (item.label ?? item.id)} checked={item.visible}
             onChange={event => update(items.map(row => row.id === item.id ? { ...row, visible: event.target.checked } : row))}/>
-          {item.label ?? item.id}
+          {item.label ?? item.id}<span className="text-xs font-normal text-slate-500">{item.visible ? "Shown" : "Hidden"}</span>
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={(item.label ?? item.id) + " placement"} value={item.group} className="rounded border px-2 py-1 text-sm"
@@ -66,7 +68,8 @@ export default function WorkspaceNavigationSetup() {
           {([-1, 1] as const).map(direction => <button type="button" key={direction}
             aria-label={`Move ${item.label ?? item.id} ${direction < 0 ? "up" : "down"}`}
             className="rounded border px-2 py-1 text-sm disabled:opacity-30"
-            disabled={index + direction < 0 || index + direction >= items.length}
+            title={search.trim() ? "Clear search to reorder shortcuts" : undefined}
+            disabled={!!search.trim() || index + direction < 0 || index + direction >= items.length}
             onClick={() => {
               const reordered = [...items];
               [reordered[index], reordered[index + direction]] = [reordered[index + direction], item];

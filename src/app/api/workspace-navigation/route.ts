@@ -4,6 +4,9 @@ import { authorizeRequest } from "@/lib/request-access";
 import { validSession } from "@/lib/session";
 import { defaultNavigation, navigationSetting, parseNavigation, type NavigationItem } from "@/lib/workspace-navigation";
 
+import { objectManagerCatalog } from "@/lib/object-manager-catalog";
+import { fieldLabel } from "@/lib/setup-metadata";
+
 export const dynamic = "force-dynamic";
 const error = (message: string, status: number) => NextResponse.json({ error: message }, { status });
 
@@ -16,7 +19,10 @@ async function navigationCatalog() {
       ? [{ id: "custom:" + row.key.slice(prefix.length), label: definition.name, group: "My Work", visible: false }]
       : [];
   });
-  return [...defaultNavigation, ...shortcuts];
+  const standardShortcuts: NavigationItem[] = Object.keys(objectManagerCatalog).map(entity => ({
+    id: "standard:" + entity, label: fieldLabel(entity) + " records", group: "My Work", visible: false,
+  }));
+  return [...defaultNavigation, ...standardShortcuts, ...shortcuts];
 }
 
 export async function GET(request: NextRequest) {
@@ -32,7 +38,7 @@ export async function GET(request: NextRequest) {
       !Array.isArray(item) && typeof item.id === "string" && keys.has(item.id)) : current;
     const items = parseNavigation(surviving, catalog);
     return NextResponse.json({
-      items: auth.access.kind === "admin" ? items : items?.filter(item => !item.id.startsWith("custom:")) ?? null,
+      items: auth.access.kind === "admin" ? items : items?.filter(item => !item.id.includes(":")) ?? null,
       ...(auth.access.kind === "admin" && { defaults: catalog }),
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
